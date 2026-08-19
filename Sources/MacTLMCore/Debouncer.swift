@@ -3,6 +3,10 @@ import Foundation
 /// Coalesces bursts of calls into one, on the main queue.
 /// With `maxDelay`, guarantees firing within `maxDelay` of the burst's first
 /// call even under continuous churn (used for launch-settle detection).
+///
+/// Callers must invoke `call(_:)` and `cancel()` on the main queue.
+/// `cancel()` prevents execution, but GCD releases the pending closure only
+/// when its original deadline passes.
 public final class Debouncer {
     private let delay: TimeInterval
     private let maxDelay: TimeInterval?
@@ -14,7 +18,12 @@ public final class Debouncer {
         self.maxDelay = maxDelay
     }
 
+    deinit {
+        pending?.cancel()
+    }
+
     public func call(_ action: @escaping () -> Void) {
+        dispatchPrecondition(condition: .onQueue(.main))
         pending?.cancel()
         let now = Date()
         if burstStart == nil { burstStart = now }
@@ -32,6 +41,7 @@ public final class Debouncer {
     }
 
     public func cancel() {
+        dispatchPrecondition(condition: .onQueue(.main))
         pending?.cancel()
         pending = nil
         burstStart = nil
