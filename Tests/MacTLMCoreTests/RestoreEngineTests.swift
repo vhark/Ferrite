@@ -59,6 +59,34 @@ final class RestoreEngineTests: XCTestCase {
         XCTAssertEqual(driver.setFrameCalls.count, 2, "one attempt + one retry, never a loop")
     }
 
+    func testWithinToleranceDoesNotRetry() {
+        let driver = FakeDriver()
+        driver.clampHeightTo = 876.5 // target height 877.5, within 2.0 tolerance
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 1, title: "W", frame: CGRect(x: 0, y: 25, width: 300, height: 300)),
+        ]
+        let records = [record(slot: 0, title: "W",
+                              frame: NormalizedFrame(x: 0, y: 0, w: 0.5, h: 0.9))]
+        RestoreEngine(driver: driver)
+            .restore(records: records, bundleID: "app", visibleArea: area)
+        XCTAssertEqual(driver.setFrameCalls.count, 1, "clamp within tolerance is accepted without retry")
+    }
+
+    func testRetryResendsOriginalTarget() {
+        let driver = FakeDriver()
+        driver.clampHeightTo = 500
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 1, title: "W", frame: CGRect(x: 0, y: 25, width: 300, height: 300)),
+        ]
+        let records = [record(slot: 0, title: "W",
+                              frame: NormalizedFrame(x: 0, y: 0, w: 0.5, h: 0.9))]
+        RestoreEngine(driver: driver)
+            .restore(records: records, bundleID: "app", visibleArea: area)
+        XCTAssertEqual(driver.setFrameCalls.count, 2)
+        XCTAssertEqual(driver.setFrameCalls[1].frame, driver.setFrameCalls[0].frame,
+                       "retry resends the original target, not the clamped result")
+    }
+
     func testNoRecordsMeansNoDriverCalls() {
         let driver = FakeDriver()
         driver.windowsByBundle["app"] = [

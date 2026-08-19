@@ -13,7 +13,7 @@ public final class RestoreEngine {
         self.driver = driver
     }
 
-    /// Returns the number of windows placed.
+    /// Returns the number of windows a placement was attempted for (clamps accepted).
     @discardableResult
     public func restore(records: [WindowRecord], bundleID: String,
                         visibleArea: CGRect) -> Int {
