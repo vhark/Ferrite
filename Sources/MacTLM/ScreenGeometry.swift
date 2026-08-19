@@ -3,15 +3,12 @@ import MacTLMCore
 
 enum ScreenGeometry {
     /// The main screen's visible area (minus menu bar/Dock) in CG space —
-    /// the coordinate space the AX API uses. THE only NS→CG conversion point.
+    /// the coordinate space the AX API uses. NS→CG conversion lives only in
+    /// this file (cgArea helper).
     static var cgVisibleAreaOfMainScreen: CGRect {
         guard let screen = NSScreen.main, let primary = NSScreen.screens.first
         else { return .zero }
-        let visible = screen.visibleFrame
-        return CGRect(x: visible.minX,
-                      y: primary.frame.maxY - visible.maxY,
-                      width: visible.width,
-                      height: visible.height)
+        return cgArea(of: screen, primary: primary)
     }
 
     /// All connected displays with CG-space visible areas and human names.
@@ -19,15 +16,20 @@ enum ScreenGeometry {
         guard let primary = NSScreen.screens.first else { return [] }
         return NSScreen.screens.compactMap { screen in
             guard let info = displayInfo(for: screen) else { return nil }
-            let visible = screen.visibleFrame
-            let cgArea = CGRect(x: visible.minX,
-                                y: primary.frame.maxY - visible.maxY,
-                                width: visible.width,
-                                height: visible.height)
             return SnapshotPlanner.Display(info: info,
                                            name: screen.localizedName,
-                                           visibleArea: cgArea)
+                                           visibleArea: cgArea(of: screen, primary: primary))
         }
+    }
+
+    /// Flips a screen's visible frame from NS (bottom-left origin) to CG
+    /// (top-left origin) space, anchored to the primary screen.
+    private static func cgArea(of screen: NSScreen, primary: NSScreen) -> CGRect {
+        let visible = screen.visibleFrame
+        return CGRect(x: visible.minX,
+                      y: primary.frame.maxY - visible.maxY,
+                      width: visible.width,
+                      height: visible.height)
     }
 
     /// Current display configuration from attached screens.
