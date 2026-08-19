@@ -41,6 +41,8 @@ if arguments.contains("--watch") {
     RunLoop.main.run()
 }
 
-// Full app assembly arrives in Task 13.
-if !AXPermission.isGranted { AXPermission.request() }
-print("MacTLM: accessibility granted = \(AXPermission.isGranted)")
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory) // menu bar only, no Dock icon
+app.run()
