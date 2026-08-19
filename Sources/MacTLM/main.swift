@@ -27,6 +27,20 @@ if arguments.contains("--list-windows") {
     exit(0)
 }
 
+if arguments.contains("--watch") {
+    guard AXPermission.isGranted else {
+        print("Accessibility permission not granted.")
+        exit(1)
+    }
+    let monitor = WorkspaceMonitor()
+    monitor.onAppLaunched = { print("LAUNCH \($0)") }
+    monitor.onAppTerminated = { print("QUIT   \($0)") }
+    monitor.onActivity = { print("EVENT  \($0)") }
+    monitor.start()
+    print("Watching window events. Ctrl-C to stop.")
+    RunLoop.main.run()
+}
+
 // Full app assembly arrives in Task 13.
 if !AXPermission.isGranted { AXPermission.request() }
 print("MacTLM: accessibility granted = \(AXPermission.isGranted)")
