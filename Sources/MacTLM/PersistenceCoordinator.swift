@@ -17,6 +17,9 @@ final class PersistenceCoordinator {
     private let monitor = WorkspaceMonitor()
     private let excludeBox: ExcludeListBox
     private let excludeURL: URL
+    let layoutLibraryStore: LayoutLibraryStore
+    private(set) lazy var templateLauncher = TemplateLauncher(driver: driver,
+                                                              coordinator: self)
     private struct PendingSettle {
         let debouncer: Debouncer
         let fire: () -> Void
@@ -25,6 +28,8 @@ final class PersistenceCoordinator {
     private var pendingSettles: [String: PendingSettle] = [:]
     private var screenToken: NSObjectProtocol?
     var isPaused = false
+
+    var currentExcludedBundleIDs: Set<String> { excludeList.bundleIDs }
 
     private var excludeList: ExcludeList {
         get { excludeBox.list }
@@ -38,6 +43,8 @@ final class PersistenceCoordinator {
         store = try LayoutStore(directory: supportDir.appendingPathComponent("configurations"))
         excludeURL = supportDir.appendingPathComponent("exclude.json")
         excludeBox = ExcludeListBox(ExcludeList.load(from: excludeURL))
+        layoutLibraryStore = LayoutLibraryStore(
+            url: supportDir.appendingPathComponent("layouts.json"))
         tracker = WindowTracker(
             driver: driver, store: store,
             configKey: { ScreenGeometry.currentConfiguration.key },
@@ -120,6 +127,24 @@ final class PersistenceCoordinator {
     func exclude(bundleID: String) {
         excludeList.bundleIDs.insert(bundleID)
         try? excludeList.save(to: excludeURL)
+    }
+
+    func saveCurrentArrangement(name: String, stageMode: StageMode) {
+        let layouts = SnapshotBuilder.snapshot(name: name, stageMode: stageMode)
+        guard !layouts.isEmpty else { return }
+        var library = layoutLibraryStore.load()
+        library.layouts.append(contentsOf: layouts)
+        try? layoutLibraryStore.save(library)
+    }
+
+    func applyLayout(_ layout: MonitorLayout) {
+        templateLauncher.apply(layout, excludedBundleIDs: currentExcludedBundleIDs)
+    }
+
+    func deleteLayout(id: UUID) {
+        var library = layoutLibraryStore.load()
+        library.layouts.removeAll { $0.id == id }
+        try? layoutLibraryStore.save(library)
     }
 
     /// Arms (or re-arms) a settle for bundleID. While armed, activity events

@@ -33,4 +33,9 @@ final class MacWindowDriver: WindowDriving {
         guard let handle = handleCache[window.id] else { return window.frame }
         return handle.setFrame(frame) ?? window.frame
     }
+
+    /// Live AX handle for a window id from the most recent enumeration.
+    func handle(forWindowID id: Int) -> AXWindowHandle? {
+        handleCache[id]
+    }
 }
