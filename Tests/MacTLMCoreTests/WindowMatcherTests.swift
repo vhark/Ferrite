@@ -62,4 +62,34 @@ final class WindowMatcherTests: XCTestCase {
         let result = WindowMatcher.assign(records: records, to: windows)
         XCTAssertEqual(result[10]?.slot, 0, "falls back to title/order matching")
     }
+
+    func testPinnedRecordWithNoMatchingWindowFallsThrough() {
+        let records = [record(slot: 0, title: "A", pin: "ZZZNOPE"),
+                       record(slot: 1, title: "B")]
+        let windows = [WindowCandidate(id: 10, title: "B", order: 0),
+                       WindowCandidate(id: 11, title: "A", order: 1)]
+        let result = WindowMatcher.assign(records: records, to: windows)
+        XCTAssertEqual(result[10]?.slot, 1)
+        XCTAssertEqual(result[11]?.slot, 0)
+    }
+
+    func testDuplicateIdenticalRecordsBothAssign() {
+        let records = [record(slot: 0, title: "X"), record(slot: 0, title: "X")]
+        let windows = [WindowCandidate(id: 10, title: "X", order: 0),
+                       WindowCandidate(id: 11, title: "Y", order: 1)]
+        let result = WindowMatcher.assign(records: records, to: windows)
+        XCTAssertEqual(result.count, 2)
+        XCTAssertNotNil(result[10])
+        XCTAssertNotNil(result[11])
+    }
+
+    func testEmptyPinPatternIsIgnored() {
+        let records = [record(slot: 0, title: "A", pin: ""),
+                       record(slot: 1, title: "B")]
+        let windows = [WindowCandidate(id: 10, title: "B", order: 0),
+                       WindowCandidate(id: 11, title: "A", order: 1)]
+        let result = WindowMatcher.assign(records: records, to: windows)
+        XCTAssertEqual(result[10]?.slot, 1)
+        XCTAssertEqual(result[11]?.slot, 0)
+    }
 }

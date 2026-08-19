@@ -20,9 +20,11 @@ public enum WindowMatcher {
         var freeRecords = records.sorted { $0.slot < $1.slot }
         var freeWindows = windows.sorted { $0.order < $1.order }
 
-        // 1. Pin patterns (case-insensitive regex; invalid patterns ignored).
-        for record in freeRecords where record.pinPattern != nil {
+        // 1. Pin patterns (case-insensitive regex; empty/invalid patterns ignored).
+        var claimed: [Int] = []
+        for (i, record) in freeRecords.enumerated() where record.pinPattern != nil {
             guard let pattern = record.pinPattern,
+                  !pattern.isEmpty,
                   (try? NSRegularExpression(pattern: pattern)) != nil,
                   let index = freeWindows.firstIndex(where: {
                       $0.title.range(of: pattern,
@@ -31,17 +33,20 @@ public enum WindowMatcher {
             else { continue }
             result[freeWindows[index].id] = record
             freeWindows.remove(at: index)
+            claimed.append(i)
         }
-        freeRecords.removeAll { candidate in result.values.contains(candidate) }
+        for i in claimed.reversed() { freeRecords.remove(at: i) }
 
         // 2. Exact title matches.
-        for record in freeRecords {
+        claimed = []
+        for (i, record) in freeRecords.enumerated() {
             guard let index = freeWindows.firstIndex(where: { $0.title == record.title })
             else { continue }
             result[freeWindows[index].id] = record
             freeWindows.remove(at: index)
+            claimed.append(i)
         }
-        freeRecords.removeAll { candidate in result.values.contains(candidate) }
+        for i in claimed.reversed() { freeRecords.remove(at: i) }
 
         // 3. Remaining pairs by order.
         for (window, record) in zip(freeWindows, freeRecords) {
