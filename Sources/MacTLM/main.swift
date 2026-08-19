@@ -12,9 +12,11 @@ if arguments.contains("--list-windows") {
     let area = ScreenGeometry.cgVisibleAreaOfMainScreen
     print("Visible area (CG): \(area)")
     print("Config key: \(ScreenGeometry.currentConfiguration.key)")
+    var seen = Set<String>()
     for app in NSWorkspace.shared.runningApplications
     where app.activationPolicy == .regular {
         guard let bundleID = app.bundleIdentifier else { continue }
+        guard seen.insert(bundleID).inserted else { continue }
         let windows = driver.windows(ofBundleID: bundleID)
         guard !windows.isEmpty else { continue }
         print("\n\(bundleID)")
