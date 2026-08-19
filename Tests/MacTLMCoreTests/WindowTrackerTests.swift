@@ -87,4 +87,59 @@ final class WindowTrackerTests: XCTestCase {
         tracker.noteActivity(bundleID: "arc")
         XCTAssertEqual(tracker.recordsFor(bundleID: "arc")[0].pinPattern, "Work")
     }
+
+    func testPinFollowsWindowWhenZOrderChanges() {
+        var seeded = ConfigurationRecords()
+        seeded.apps["arc"] = [
+            WindowRecord(slot: 0, title: "Work — Arc",
+                         frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9),
+                         pinPattern: "Work", lastSeen: Date(timeIntervalSince1970: 0)),
+            WindowRecord(slot: 1, title: "Personal",
+                         frame: NormalizedFrame(x: 0.5, y: 0, w: 0.25, h: 0.9),
+                         pinPattern: nil, lastSeen: Date(timeIntervalSince1970: 0)),
+        ]
+        try? store.save(seeded, configKey: "test-config")
+        driver.windowsByBundle["arc"] = [
+            DriverWindow(id: 10, title: "Personal", frame: CGRect(x: 0, y: 25, width: 400, height: 900)),
+            DriverWindow(id: 11, title: "Work — Arc", frame: CGRect(x: 400, y: 25, width: 400, height: 900)),
+        ]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "arc")
+        let records = tracker.recordsFor(bundleID: "arc")
+        XCTAssertNil(records[0].pinPattern)
+        XCTAssertEqual(records[1].pinPattern, "Work")
+    }
+
+    func testUnmatchedPinFallsBackToSlot() {
+        var seeded = ConfigurationRecords()
+        seeded.apps["arc"] = [
+            WindowRecord(slot: 0, title: "Old",
+                         frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9),
+                         pinPattern: "Work", lastSeen: Date(timeIntervalSince1970: 0)),
+        ]
+        try? store.save(seeded, configKey: "test-config")
+        driver.windowsByBundle["arc"] = [
+            DriverWindow(id: 10, title: "Untitled", frame: CGRect(x: 0, y: 25, width: 400, height: 900)),
+        ]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "arc")
+        XCTAssertEqual(tracker.recordsFor(bundleID: "arc")[0].pinPattern, "Work")
+    }
+
+    func testReloadFlushesOldNamespaceBeforeSwap() {
+        var key = "cfg-A"
+        let tracker = WindowTracker(driver: driver, store: store,
+                                    configKey: { key },
+                                    visibleArea: { self.area },
+                                    excludeList: { .defaults },
+                                    saveDelay: 60)
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 1, title: "W", frame: CGRect(x: 0, y: 25, width: 800, height: 600)),
+        ]
+        tracker.noteActivity(bundleID: "app")
+        key = "cfg-B"
+        tracker.reloadForCurrentConfiguration()
+        XCTAssertEqual(store.load(configKey: "cfg-A").apps["app"]?.count, 1)
+        XCTAssertTrue(tracker.recordsFor(bundleID: "app").isEmpty)
+    }
 }

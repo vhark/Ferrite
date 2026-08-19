@@ -13,6 +13,7 @@ public final class WindowTracker {
     private let excludeList: () -> ExcludeList
     private let saveDebouncer: Debouncer
     private var records: ConfigurationRecords
+    private var loadedKey: String
 
     public init(driver: WindowDriving, store: LayoutStore,
                 configKey: @escaping () -> String,
@@ -25,7 +26,8 @@ public final class WindowTracker {
         self.visibleArea = visibleArea
         self.excludeList = excludeList
         self.saveDebouncer = Debouncer(delay: saveDelay)
-        self.records = store.load(configKey: configKey())
+        self.loadedKey = configKey()
+        self.records = store.load(configKey: loadedKey)
     }
 
     /// Call on window created/moved/resized/title-changed for an app.
@@ -53,7 +55,9 @@ public final class WindowTracker {
     /// Call when the display configuration changes: swap namespaces.
     public func reloadForCurrentConfiguration() {
         saveDebouncer.cancel()
-        records = store.load(configKey: configKey())
+        persist() // flush old namespace before swapping
+        loadedKey = configKey()
+        records = store.load(configKey: loadedKey)
     }
 
     private func capture(bundleID: String) {
@@ -62,16 +66,43 @@ public final class WindowTracker {
         let area = visibleArea()
         guard area.width > 0, area.height > 0 else { return }
         let existing = records.apps[bundleID] ?? []
+        let pins = assignPins(existing: existing, windows: windows)
         records.apps[bundleID] = windows.enumerated().map { index, window in
             WindowRecord(slot: index,
                          title: window.title,
                          frame: NormalizedFrame(windowFrame: window.frame, visibleArea: area),
-                         pinPattern: existing.first { $0.slot == index }?.pinPattern,
+                         pinPattern: pins[index],
                          lastSeen: Date())
         }
     }
 
+    /// Pins follow their window: each pin re-attaches to the first captured
+    /// window whose title matches its pattern; unmatched (or invalid/empty)
+    /// pins fall back to their original slot.
+    private func assignPins(existing: [WindowRecord], windows: [DriverWindow]) -> [Int: String] {
+        var result: [Int: String] = [:]
+        var unmatched: [(slot: Int, pattern: String)] = []
+        var taken = Set<Int>()
+        for record in existing {
+            guard let pattern = record.pinPattern else { continue }
+            if !pattern.isEmpty,
+               let index = windows.indices.first(where: { candidate in
+                   !taken.contains(candidate) && windows[candidate].title.range(
+                       of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+               }) {
+                result[index] = pattern
+                taken.insert(index)
+            } else {
+                unmatched.append((record.slot, pattern))
+            }
+        }
+        for (slot, pattern) in unmatched where slot < windows.count && result[slot] == nil {
+            result[slot] = pattern
+        }
+        return result
+    }
+
     private func persist() {
-        try? store.save(records, configKey: configKey())
+        try? store.save(records, configKey: loadedKey)
     }
 }
