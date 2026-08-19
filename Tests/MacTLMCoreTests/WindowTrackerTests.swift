@@ -142,4 +142,20 @@ final class WindowTrackerTests: XCTestCase {
         XCTAssertEqual(store.load(configKey: "cfg-A").apps["app"]?.count, 1)
         XCTAssertTrue(tracker.recordsFor(bundleID: "app").isEmpty)
     }
+
+    func testActivityDuringConfigDriftIsDropped() {
+        var key = "cfg-A"
+        let tracker = WindowTracker(driver: driver, store: store,
+                                    configKey: { key },
+                                    visibleArea: { self.area },
+                                    excludeList: { .defaults },
+                                    saveDelay: 60)
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 1, title: "W", frame: CGRect(x: 0, y: 25, width: 800, height: 600)),
+        ]
+        key = "cfg-B" // display changed; reload hasn't run yet
+        tracker.noteActivity(bundleID: "app")
+        XCTAssertTrue(tracker.recordsFor(bundleID: "app").isEmpty,
+                      "capture during config drift must be dropped")
+    }
 }

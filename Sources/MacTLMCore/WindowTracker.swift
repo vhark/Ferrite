@@ -33,6 +33,7 @@ public final class WindowTracker {
     /// Call on window created/moved/resized/title-changed for an app.
     public func noteActivity(bundleID: String) {
         guard !excludeList().isExcluded(bundleID) else { return }
+        guard configKey() == loadedKey else { return } // mid-config-change; caller reloads next
         capture(bundleID: bundleID)
         saveDebouncer.call { [weak self] in self?.persist() }
     }

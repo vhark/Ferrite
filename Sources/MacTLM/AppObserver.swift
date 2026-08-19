@@ -36,9 +36,13 @@ final class AppObserver {
         observer = axObserver
 
         let refcon = Unmanaged.passUnretained(self).toOpaque()
+        var registered = 0
         for name in Self.notifications {
-            AXObserverAddNotification(axObserver, appElement, name as CFString, refcon)
+            if AXObserverAddNotification(axObserver, appElement, name as CFString, refcon) == .success {
+                registered += 1
+            }
         }
+        guard registered > 0 else { return nil } // deaf observer → monitor's retry path
         CFRunLoopAddSource(CFRunLoopGetMain(),
                            AXObserverGetRunLoopSource(axObserver), .defaultMode)
     }

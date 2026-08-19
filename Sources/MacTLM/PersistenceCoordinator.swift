@@ -47,6 +47,17 @@ final class PersistenceCoordinator {
     }
 
     func start() {
+        // Arm settle restores for remembered apps that are already running,
+        // BEFORE the monitor's startup sweep kickstarts capture — otherwise the
+        // sweep overwrites saved records and the login restore becomes a no-op.
+        for bundleID in tracker.rememberedBundleIDs
+        where !excludeList.isExcluded(bundleID)
+            && !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
+            let settle = Debouncer(delay: 1.5, maxDelay: 10.0)
+            pendingRestores[bundleID] = settle
+            settle.call { [weak self] in self?.fireRestore(bundleID) }
+        }
+
         monitor.onActivity = { [weak self] bundleID in
             guard let self, !self.isPaused else { return }
             if let settle = self.pendingRestores[bundleID] {
@@ -91,6 +102,7 @@ final class PersistenceCoordinator {
     /// Restore every remembered app that is currently running.
     func restoreAll() {
         let area = ScreenGeometry.cgVisibleAreaOfMainScreen
+        guard area.width > 0, area.height > 0 else { return }
         for bundleID in tracker.rememberedBundleIDs
         where !excludeList.isExcluded(bundleID) {
             engine.restore(records: tracker.recordsFor(bundleID: bundleID),
@@ -106,8 +118,9 @@ final class PersistenceCoordinator {
     private func fireRestore(_ bundleID: String) {
         pendingRestores.removeValue(forKey: bundleID)
         guard !isPaused, !excludeList.isExcluded(bundleID) else { return }
+        let area = ScreenGeometry.cgVisibleAreaOfMainScreen
+        guard area.width > 0, area.height > 0 else { return }
         engine.restore(records: tracker.recordsFor(bundleID: bundleID),
-                       bundleID: bundleID,
-                       visibleArea: ScreenGeometry.cgVisibleAreaOfMainScreen)
+                       bundleID: bundleID, visibleArea: area)
     }
 }
