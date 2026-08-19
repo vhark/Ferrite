@@ -26,9 +26,8 @@ final class WorkspaceMonitor {
             object: nil, queue: .main) { [weak self] note in
                 guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
                         as? NSRunningApplication else { return }
-                self?.observers.removeValue(forKey: app.processIdentifier)
-                if let bundleID = app.bundleIdentifier {
-                    self?.onAppTerminated?(bundleID)
+                if let removed = self?.observers.removeValue(forKey: app.processIdentifier) {
+                    self?.onAppTerminated?(removed.bundleID)
                 }
         })
         // Attach to everything already running.
@@ -38,14 +37,42 @@ final class WorkspaceMonitor {
         }
     }
 
+    deinit {
+        notificationTokens.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
+    }
+
     private func attach(to app: NSRunningApplication) {
         guard app.activationPolicy == .regular,
-              observers[app.processIdentifier] == nil,
-              let observer = AppObserver(app: app, onActivity: { [weak self] bundleID in
-                  self?.onActivity?(bundleID)
-              })
-        else { return }
+              observers[app.processIdentifier] == nil else { return }
+        guard let observer = makeObserver(for: app) else {
+            NSLog("MacTLM: AX observer attach failed for %@, retrying once",
+                  app.bundleIdentifier ?? "?")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.attachRetry(to: app)
+            }
+            return
+        }
         observers[app.processIdentifier] = observer
         observer.kickstart()
+    }
+
+    /// One-shot retry: no further retries are scheduled on failure.
+    private func attachRetry(to app: NSRunningApplication) {
+        guard app.activationPolicy == .regular,
+              !app.isTerminated,
+              observers[app.processIdentifier] == nil else { return }
+        guard let observer = makeObserver(for: app) else {
+            NSLog("MacTLM: AX observer attach failed permanently for %@",
+                  app.bundleIdentifier ?? "?")
+            return
+        }
+        observers[app.processIdentifier] = observer
+        observer.kickstart()
+    }
+
+    private func makeObserver(for app: NSRunningApplication) -> AppObserver? {
+        AppObserver(app: app, onActivity: { [weak self] bundleID in
+            self?.onActivity?(bundleID)
+        })
     }
 }
