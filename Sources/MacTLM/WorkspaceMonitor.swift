@@ -16,10 +16,13 @@ final class WorkspaceMonitor {
             object: nil, queue: .main) { [weak self] note in
                 guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
                         as? NSRunningApplication else { return }
-                self?.attach(to: app)
+                // onAppLaunched must precede attach: attach() kickstarts a
+                // synchronous activity event, and consumers may need to arm
+                // routing state first.
                 if let bundleID = app.bundleIdentifier {
                     self?.onAppLaunched?(bundleID)
                 }
+                self?.attach(to: app)
         })
         notificationTokens.append(center.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification,

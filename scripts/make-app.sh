@@ -1,6 +1,7 @@
 #!/bin/bash
-# Builds MacTLM.app — a stable bundle ID keeps the Accessibility grant
-# across rebuilds (TCC keys off the bundle, not the binary).
+# Builds MacTLM.app. Note: ad-hoc signing re-keys TCC per build; after a
+# rebuild you may need to toggle the Accessibility grant off/on in System
+# Settings. A stable signing identity fixes this permanently.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

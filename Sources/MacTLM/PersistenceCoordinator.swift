@@ -19,6 +19,7 @@ final class PersistenceCoordinator {
     private let excludeURL: URL
     /// bundleID → settle debouncer. Presence means "restore pending".
     private var pendingRestores: [String: Debouncer] = [:]
+    private var screenToken: NSObjectProtocol?
     var isPaused = false
 
     private var excludeList: ExcludeList {
@@ -39,6 +40,10 @@ final class PersistenceCoordinator {
             visibleArea: { ScreenGeometry.cgVisibleAreaOfMainScreen },
             excludeList: { [excludeBox] in excludeBox.list })
         engine = RestoreEngine(driver: driver)
+    }
+
+    deinit {
+        if let screenToken { NotificationCenter.default.removeObserver(screenToken) }
     }
 
     func start() {
@@ -67,7 +72,7 @@ final class PersistenceCoordinator {
         monitor.start()
 
         // Display-configuration changes swap the record namespace and re-assert.
-        NotificationCenter.default.addObserver(
+        screenToken = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main) { [weak self] _ in
                 guard let self, !self.isPaused else { return }
@@ -100,6 +105,7 @@ final class PersistenceCoordinator {
 
     private func fireRestore(_ bundleID: String) {
         pendingRestores.removeValue(forKey: bundleID)
+        guard !isPaused, !excludeList.isExcluded(bundleID) else { return }
         engine.restore(records: tracker.recordsFor(bundleID: bundleID),
                        bundleID: bundleID,
                        visibleArea: ScreenGeometry.cgVisibleAreaOfMainScreen)
