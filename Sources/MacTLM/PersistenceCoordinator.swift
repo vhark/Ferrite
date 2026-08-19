@@ -17,8 +17,12 @@ final class PersistenceCoordinator {
     private let monitor = WorkspaceMonitor()
     private let excludeBox: ExcludeListBox
     private let excludeURL: URL
-    /// bundleID → settle debouncer. Presence means "restore pending".
-    private var pendingRestores: [String: Debouncer] = [:]
+    private struct PendingSettle {
+        let debouncer: Debouncer
+        let fire: () -> Void
+    }
+    /// bundleID → armed settle. Presence suppresses tracker capture.
+    private var pendingSettles: [String: PendingSettle] = [:]
     private var screenToken: NSObjectProtocol?
     var isPaused = false
 
@@ -53,17 +57,17 @@ final class PersistenceCoordinator {
         for bundleID in tracker.rememberedBundleIDs
         where !excludeList.isExcluded(bundleID)
             && !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
-            let settle = Debouncer(delay: 1.5, maxDelay: 10.0)
-            pendingRestores[bundleID] = settle
-            settle.call { [weak self] in self?.fireRestore(bundleID) }
+            armSettle(bundleID: bundleID) { [weak self] in
+                self?.restoreRecords(bundleID: bundleID)
+            }
         }
 
         monitor.onActivity = { [weak self] bundleID in
             guard let self, !self.isPaused else { return }
-            if let settle = self.pendingRestores[bundleID] {
-                // Restore pending: feed the settle timer, do NOT track — the
+            if let settle = self.pendingSettles[bundleID] {
+                // Settle pending: feed the settle timer, do NOT track — the
                 // app's own launch placement must not overwrite our records.
-                settle.call { [weak self] in self?.fireRestore(bundleID) }
+                settle.debouncer.call(settle.fire)
             } else {
                 self.tracker.noteActivity(bundleID: bundleID)
             }
@@ -72,12 +76,15 @@ final class PersistenceCoordinator {
             guard let self, !self.isPaused,
                   !self.excludeList.isExcluded(bundleID),
                   !self.tracker.recordsFor(bundleID: bundleID).isEmpty else { return }
-            let settle = Debouncer(delay: 1.5, maxDelay: 10.0)
-            self.pendingRestores[bundleID] = settle
-            settle.call { [weak self] in self?.fireRestore(bundleID) }
+            guard self.pendingSettles[bundleID] == nil else { return }
+            self.armSettle(bundleID: bundleID) { [weak self] in
+                self?.restoreRecords(bundleID: bundleID)
+            }
         }
         monitor.onAppTerminated = { [weak self] bundleID in
-            self?.pendingRestores.removeValue(forKey: bundleID)?.cancel()
+            if let settle = self?.pendingSettles.removeValue(forKey: bundleID) {
+                settle.debouncer.cancel()
+            }
             self?.tracker.noteTermination(bundleID: bundleID)
         }
         monitor.start()
@@ -115,8 +122,21 @@ final class PersistenceCoordinator {
         try? excludeList.save(to: excludeURL)
     }
 
-    private func fireRestore(_ bundleID: String) {
-        pendingRestores.removeValue(forKey: bundleID)
+    /// Arms (or re-arms) a settle for bundleID. While armed, activity events
+    /// feed the settle timer instead of the tracker. `fire` runs once after
+    /// 1.5s of quiet (10s cap) and the entry is removed first.
+    func armSettle(bundleID: String, fire: @escaping () -> Void) {
+        let debouncer = Debouncer(delay: 1.5, maxDelay: 10.0)
+        let settle = PendingSettle(debouncer: debouncer) { [weak self] in
+            self?.pendingSettles.removeValue(forKey: bundleID)
+            fire()
+        }
+        pendingSettles[bundleID]?.debouncer.cancel()
+        pendingSettles[bundleID] = settle
+        debouncer.call(settle.fire)
+    }
+
+    private func restoreRecords(bundleID: String) {
         guard !isPaused, !excludeList.isExcluded(bundleID) else { return }
         let area = ScreenGeometry.cgVisibleAreaOfMainScreen
         guard area.width > 0, area.height > 0 else { return }
