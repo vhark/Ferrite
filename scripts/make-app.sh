@@ -1,7 +1,7 @@
 #!/bin/bash
-# Builds MacTLM.app. Note: ad-hoc signing re-keys TCC per build; after a
-# rebuild you may need to toggle the Accessibility grant off/on in System
-# Settings. A stable signing identity fixes this permanently.
+# Builds MacTLM.app. Signs with the "MacTLM Dev" self-signed identity when
+# present (stable TCC grant across rebuilds); falls back to ad-hoc signing,
+# which re-keys TCC per build (re-grant Accessibility after each rebuild).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,5 +25,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
-codesign --force --sign - "$APP"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "MacTLM Dev"; then
+  codesign --force --sign "MacTLM Dev" "$APP"
+else
+  codesign --force --sign - "$APP"
+fi
 echo "Built $APP"
