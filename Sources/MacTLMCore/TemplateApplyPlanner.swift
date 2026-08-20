@@ -25,10 +25,14 @@ public enum TemplateApplyPlanner {
 
     public struct ApplyPlan {
         public let adapted: Bool
-        public let appsToLaunch: [String]       // deduped, entry order
+        public let appsToLaunch: [String]       // deduped, backmost-first
         public let placements: [Placement]      // excluded apps carry none
         public let stageMode: StageMode
         public let memberBundleIDs: Set<String> // for clear-stage hiding
+        /// Every active member, ordered backmost-first by its frontmost window's
+        /// zIndex. Excluded apps appear here (they join the stacking cascade)
+        /// even though they carry no placement.
+        public let appStackingOrder: [String]
 
         /// Pseudo-records for WindowMatcher when adopting a running app's windows.
         public func matchingRecords(forBundleID bundleID: String) -> [WindowRecord] {
@@ -58,16 +62,18 @@ public enum TemplateApplyPlanner {
             !(skipOptionals && entry.optional)
         }
 
-        var seenLaunch = Set<String>()
-        var appsToLaunch: [String] = []
+        // One rank per bundle: the frontmost (lowest) zIndex it owns, kept in
+        // first-appearance order so equal zIndexes sort deterministically.
+        var appRanks: [(bundleID: String, frontmostZ: Int)] = []
+        var rankIndex: [String: Int] = [:]
         var placements: [Placement] = []
-        var members = Set<String>()
 
         for (index, entry) in activeEntries {
-            members.insert(entry.bundleID)
-            if !runningBundleIDs.contains(entry.bundleID),
-               seenLaunch.insert(entry.bundleID).inserted {
-                appsToLaunch.append(entry.bundleID)
+            if let rank = rankIndex[entry.bundleID] {
+                appRanks[rank].frontmostZ = min(appRanks[rank].frontmostZ, entry.zIndex)
+            } else {
+                rankIndex[entry.bundleID] = appRanks.count
+                appRanks.append((entry.bundleID, entry.zIndex))
             }
             guard !excludedBundleIDs.contains(entry.bundleID) else { continue }
             placements.append(Placement(bundleID: entry.bundleID,
@@ -78,8 +84,19 @@ public enum TemplateApplyPlanner {
                                         title: entry.title,
                                         pinPattern: entry.pinPattern))
         }
+
+        let appStackingOrder = appRanks.enumerated().sorted {
+            $0.element.frontmostZ == $1.element.frontmostZ
+                ? $0.offset < $1.offset
+                : $0.element.frontmostZ > $1.element.frontmostZ
+        }.map(\.element.bundleID)
+        // Launch backmost-first too: the backmost apps get a head start, so in
+        // the common case they are already behind and need less restacking.
+        let appsToLaunch = appStackingOrder.filter { !runningBundleIDs.contains($0) }
+
         return ApplyPlan(adapted: adapted, appsToLaunch: appsToLaunch,
                          placements: placements, stageMode: layout.stageMode,
-                         memberBundleIDs: members)
+                         memberBundleIDs: Set(rankIndex.keys),
+                         appStackingOrder: appStackingOrder)
     }
 }

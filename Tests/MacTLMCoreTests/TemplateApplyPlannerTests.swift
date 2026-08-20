@@ -108,4 +108,33 @@ final class TemplateApplyPlannerTests: XCTestCase {
         XCTAssertEqual(record.frame.rect(in: sameTarget.visibleArea),
                        plan.placements[0].targetRect)
     }
+
+    func testStackingOrderIncludesExcludedAppsBackmostFirst() {
+        let entries = [entry("front", z: 0), entry("middle", z: 1),
+                       entry("com.adobe.illustrator", z: 2)]
+        let plan = TemplateApplyPlanner.plan(
+            layout: layout(entries: entries),
+            runningBundleIDs: [], excludedBundleIDs: ["com.adobe.illustrator"],
+            target: sameTarget)
+        XCTAssertEqual(plan.appStackingOrder, ["com.adobe.illustrator", "middle", "front"])
+        XCTAssertFalse(plan.placements.contains { $0.bundleID == "com.adobe.illustrator" },
+                       "excluded apps still get no placement")
+    }
+
+    func testLaunchOrderIsBackmostFirst() {
+        let entries = [entry("front", z: 0), entry("back", z: 5)]
+        let plan = TemplateApplyPlanner.plan(
+            layout: layout(entries: entries),
+            runningBundleIDs: [], excludedBundleIDs: [], target: sameTarget)
+        XCTAssertEqual(plan.appsToLaunch, ["back", "front"])
+    }
+
+    func testStackingOrderUsesFrontmostWindowPerApp() {
+        let entries = [entry("multi", z: 0), entry("other", z: 1), entry("multi", z: 9)]
+        let plan = TemplateApplyPlanner.plan(
+            layout: layout(entries: entries),
+            runningBundleIDs: [], excludedBundleIDs: [], target: sameTarget)
+        XCTAssertEqual(plan.appStackingOrder, ["other", "multi"],
+                       "an app's frontmost window decides its place in the cascade")
+    }
 }

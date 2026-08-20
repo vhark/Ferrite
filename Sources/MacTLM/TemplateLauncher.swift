@@ -84,11 +84,13 @@ final class TemplateLauncher {
     // MARK: - Private
 
     /// The one apply currently waiting on launches: its plan, the display area
-    /// it was planned against, and the apps still to arrive.
+    /// it was planned against, the apps still to arrive, and whether the
+    /// launch deadline already reported them missing (we keep waiting).
     private struct InFlight {
         let plan: TemplateApplyPlanner.ApplyPlan
         let visibleArea: CGRect
         var awaiting: Set<String>
+        var reportedMissing: Bool = false
     }
 
     private var inFlight: InFlight?
@@ -112,7 +114,11 @@ final class TemplateLauncher {
         inFlight?.awaiting.remove(bundleID)
         engine.restore(records: plan.matchingRecords(forBundleID: bundleID),
                        bundleID: bundleID, visibleArea: visibleArea)
-        if inFlight?.awaiting.isEmpty == true {
+        if inFlight?.reportedMissing == true {
+            // A late arrival: re-run the cascade so it lands in its z position
+            // instead of staying frontmost on top of the template.
+            restoreStacking(plan: plan)
+        } else if inFlight?.awaiting.isEmpty == true {
             launchDeadline?.cancel()
             launchDeadline = nil
             restoreStacking(plan: plan)
@@ -122,28 +128,35 @@ final class TemplateLauncher {
     private func reportMissing() {
         guard let flight = inFlight else { return }
         let missing = flight.awaiting.sorted()
-        inFlight = nil
         launchDeadline = nil
+        guard !missing.isEmpty else {
+            // Raced the deadline: everything arrived, finish normally.
+            restoreStacking(plan: flight.plan)
+            return
+        }
+        // Keep the flight alive: a slow launcher whose window shows up after
+        // the deadline still needs placing and restacking.
+        inFlight?.reportedMissing = true
         restoreStacking(plan: flight.plan)
-        guard !missing.isEmpty else { return }
         NSLog("MacTLM: template apps failed to launch: %@", missing.joined(separator: ", "))
         MissingAppNotifier.notify(missing: missing)
+        // Hard stop: stop waiting for stragglers two minutes after the report.
+        let stop = DispatchWorkItem { [weak self] in self?.inFlight = nil }
+        launchDeadline = stop
+        DispatchQueue.main.asyncAfter(deadline: .now() + 120.0, execute: stop)
     }
 
     /// Restores stacking across apps: activate member apps backmost-first
     /// (spaced so each activation lands), raising each app's own windows
     /// back-to-front as we go. The app owning zIndex 0 ends up frontmost.
+    /// Excluded apps take part too — activation only, no frames touched.
     private func restoreStacking(plan: TemplateApplyPlanner.ApplyPlan) {
-        defer { inFlight = nil }
-        // Frontmost (lowest zIndex) placement per bundle decides app order.
-        var frontmostZ: [String: Int] = [:]
-        for placement in plan.placements {
-            let current = frontmostZ[placement.bundleID] ?? Int.max
-            frontmostZ[placement.bundleID] = min(current, placement.zIndex)
+        // Done waiting, unless we're holding the flight open for late arrivals.
+        if inFlight?.awaiting.isEmpty == true, inFlight?.reportedMissing == false {
+            inFlight = nil
         }
         // Backmost app first, so the last activation leaves z=0's app in front.
-        let appOrder = frontmostZ.sorted { $0.value > $1.value }.map(\.key)
-        for (step, bundleID) in appOrder.enumerated() {
+        for (step, bundleID) in plan.appStackingOrder.enumerated() {
             let delay = Double(step) * 0.06
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.activateAndRaise(bundleID: bundleID, plan: plan)
@@ -159,11 +172,14 @@ final class TemplateLauncher {
         where !app.isHidden {
             app.activate(options: [])
         }
+        let records = plan.matchingRecords(forBundleID: bundleID)
+        // Excluded app: it joins the cascade by activation alone, so we never
+        // enumerate or raise its windows (PRD §9).
+        guard !records.isEmpty else { return }
         let windows = driver.windows(ofBundleID: bundleID)
         let candidates = windows.enumerated().map { index, window in
             WindowCandidate(id: window.id, title: window.title, order: index)
         }
-        let records = plan.matchingRecords(forBundleID: bundleID)
         // Same count gate as placement, so raise order matches what was placed.
         let assignment = WindowMatcher.assign(
             records: records, to: candidates,
