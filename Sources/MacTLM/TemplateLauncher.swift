@@ -7,14 +7,24 @@ import MacTLMCore
 final class TemplateLauncher {
     private let driver: MacWindowDriver
     private unowned let coordinator: PersistenceCoordinator
+    private let engine: RestoreEngine
     private var launchDeadline: DispatchWorkItem?
 
-    init(driver: MacWindowDriver, coordinator: PersistenceCoordinator) {
+    init(driver: MacWindowDriver, coordinator: PersistenceCoordinator,
+         engine: RestoreEngine) {
         self.driver = driver
         self.coordinator = coordinator
+        self.engine = engine
     }
 
     func apply(_ layout: MonitorLayout, excludedBundleIDs: Set<String>) {
+        if inFlight != nil {
+            // A second apply supersedes the first; the old launches are dropped.
+            launchDeadline?.cancel()
+            launchDeadline = nil
+            inFlight = nil
+            NSLog("MacTLM: superseding an in-flight template launch")
+        }
         guard let target = resolveTarget(for: layout) else { return }
         let running = Set(NSWorkspace.shared.runningApplications
             .compactMap { $0.activationPolicy == .regular ? $0.bundleIdentifier : nil })
@@ -22,7 +32,8 @@ final class TemplateLauncher {
                                              runningBundleIDs: running,
                                              excludedBundleIDs: excludedBundleIDs,
                                              target: target)
-        guard target.visibleArea.width > 0, target.visibleArea.height > 0 else { return }
+        let visibleArea = target.visibleArea
+        guard visibleArea.width > 0, visibleArea.height > 0 else { return }
 
         if plan.stageMode == .clearStage {
             for app in NSWorkspace.shared.runningApplications
@@ -37,7 +48,8 @@ final class TemplateLauncher {
         // Place already-running members now.
         let runningMembers = Set(plan.placements.map(\.bundleID)).intersection(running)
         for bundleID in runningMembers {
-            place(bundleID: bundleID, plan: plan)
+            engine.restore(records: plan.matchingRecords(forBundleID: bundleID),
+                           bundleID: bundleID, visibleArea: visibleArea)
         }
 
         // Launch missing members; place each after its settle.
@@ -50,19 +62,18 @@ final class TemplateLauncher {
             }
             awaited.insert(bundleID)
             coordinator.armSettle(bundleID: bundleID) { [weak self] in
-                self?.awaitedDidSettle(bundleID: bundleID, plan: plan)
+                self?.awaitedDidSettle(bundleID: bundleID, plan: plan,
+                                       visibleArea: visibleArea)
             }
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = false
             NSWorkspace.shared.openApplication(at: url, configuration: configuration)
         }
-        self.awaitedLaunches = awaited
-        self.activePlan = plan
+        inFlight = InFlight(plan: plan, visibleArea: visibleArea, awaiting: awaited)
 
         if !awaited.isEmpty {
             // Anything not arrived in 15s: place what came, report the rest.
             let deadline = DispatchWorkItem { [weak self] in self?.reportMissing() }
-            launchDeadline?.cancel()
             launchDeadline = deadline
             DispatchQueue.main.asyncAfter(deadline: .now() + 15.0, execute: deadline)
         } else {
@@ -72,8 +83,15 @@ final class TemplateLauncher {
 
     // MARK: - Private
 
-    private var awaitedLaunches = Set<String>()
-    private var activePlan: TemplateApplyPlanner.ApplyPlan?
+    /// The one apply currently waiting on launches: its plan, the display area
+    /// it was planned against, and the apps still to arrive.
+    private struct InFlight {
+        let plan: TemplateApplyPlanner.ApplyPlan
+        let visibleArea: CGRect
+        var awaiting: Set<String>
+    }
+
+    private var inFlight: InFlight?
 
     private func resolveTarget(for layout: MonitorLayout) -> TemplateApplyPlanner.Target? {
         let displays = ScreenGeometry.allDisplays
@@ -85,29 +103,16 @@ final class TemplateLauncher {
         return TemplateApplyPlanner.Target(info: main.info, visibleArea: main.visibleArea)
     }
 
-    private func place(bundleID: String, plan: TemplateApplyPlanner.ApplyPlan) {
-        let windows = driver.windows(ofBundleID: bundleID)
-        let candidates = windows.enumerated().map { index, window in
-            WindowCandidate(id: window.id, title: window.title, order: index)
-        }
-        let records = plan.matchingRecords(forBundleID: bundleID)
-        let placementsForBundle = plan.placements.filter { $0.bundleID == bundleID }
-        let assignment = WindowMatcher.assign(records: records, to: candidates)
-        for window in windows {
-            guard let record = assignment[window.id],
-                  record.slot < placementsForBundle.count else { continue }
-            let targetRect = placementsForBundle[record.slot].targetRect
-            let achieved = driver.setFrame(targetRect, of: window)
-            if !achieved.approximatelyEquals(targetRect, tolerance: RestoreEngine.tolerance) {
-                _ = driver.setFrame(targetRect, of: window)
-            }
-        }
-    }
-
-    private func awaitedDidSettle(bundleID: String, plan: TemplateApplyPlanner.ApplyPlan) {
-        awaitedLaunches.remove(bundleID)
-        place(bundleID: bundleID, plan: plan)
-        if awaitedLaunches.isEmpty {
+    private func awaitedDidSettle(bundleID: String, plan: TemplateApplyPlanner.ApplyPlan,
+                                  visibleArea: CGRect) {
+        guard inFlight?.awaiting.contains(bundleID) == true else { return } // superseded
+        guard NSWorkspace.shared.runningApplications.contains(where: {
+            $0.bundleIdentifier == bundleID
+        }) else { return } // never launched — the deadline will report it
+        inFlight?.awaiting.remove(bundleID)
+        engine.restore(records: plan.matchingRecords(forBundleID: bundleID),
+                       bundleID: bundleID, visibleArea: visibleArea)
+        if inFlight?.awaiting.isEmpty == true {
             launchDeadline?.cancel()
             launchDeadline = nil
             restoreStacking(plan: plan)
@@ -115,11 +120,11 @@ final class TemplateLauncher {
     }
 
     private func reportMissing() {
-        let missing = awaitedLaunches.sorted()
-        awaitedLaunches = []
-        if let plan = activePlan {
-            restoreStacking(plan: plan)
-        }
+        guard let flight = inFlight else { return }
+        let missing = flight.awaiting.sorted()
+        inFlight = nil
+        launchDeadline = nil
+        restoreStacking(plan: flight.plan)
         guard !missing.isEmpty else { return }
         NSLog("MacTLM: template apps failed to launch: %@", missing.joined(separator: ", "))
         MissingAppNotifier.notify(missing: missing)
@@ -139,13 +144,12 @@ final class TemplateLauncher {
             let candidates = windows.enumerated().map { index, window in
                 WindowCandidate(id: window.id, title: window.title, order: index)
             }
-            guard let plan = activePlan else { break }
             let records = plan.matchingRecords(forBundleID: item.bundleID)
             let assignment = WindowMatcher.assign(records: records, to: candidates)
             guard let (windowID, _) = assignment.first(where: { $0.value.slot == item.slot }),
                   let handle = driver.handle(forWindowID: windowID) else { continue }
             AXUIElementPerformAction(handle.element, kAXRaiseAction as CFString)
         }
-        activePlan = nil
+        inFlight = nil
     }
 }

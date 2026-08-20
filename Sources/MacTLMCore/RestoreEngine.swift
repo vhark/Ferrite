@@ -37,7 +37,7 @@ public final class RestoreEngine {
     }
 }
 
-public extension CGRect {
+extension CGRect {
     func approximatelyEquals(_ other: CGRect, tolerance: CGFloat) -> Bool {
         abs(minX - other.minX) <= tolerance
             && abs(minY - other.minY) <= tolerance

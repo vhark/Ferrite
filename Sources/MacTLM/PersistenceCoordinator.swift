@@ -19,7 +19,8 @@ final class PersistenceCoordinator {
     private let excludeURL: URL
     let layoutLibraryStore: LayoutLibraryStore
     private(set) lazy var templateLauncher = TemplateLauncher(driver: driver,
-                                                              coordinator: self)
+                                                              coordinator: self,
+                                                              engine: engine)
     private struct PendingSettle {
         let debouncer: Debouncer
         let fire: () -> Void

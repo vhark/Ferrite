@@ -97,4 +97,15 @@ final class TemplateApplyPlannerTests: XCTestCase {
         XCTAssertEqual(records[0].pinPattern, "Work")
         XCTAssertEqual(records[1].title, "Personal")
     }
+
+    func testMatchingRecordsCarryRealNormalizedFrames() {
+        let plan = TemplateApplyPlanner.plan(
+            layout: layout(entries: [entry("a")]),
+            runningBundleIDs: ["a"], excludedBundleIDs: [], target: sameTarget)
+        let record = plan.matchingRecords(forBundleID: "a")[0]
+        XCTAssertEqual(record.frame.x, 0.25, accuracy: 0.001)
+        XCTAssertEqual(record.frame.w, 0.5, accuracy: 0.001)
+        XCTAssertEqual(record.frame.rect(in: sameTarget.visibleArea),
+                       plan.placements[0].targetRect)
+    }
 }
