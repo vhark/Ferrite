@@ -23,3 +23,20 @@ public struct ConfigurationRecords: Codable, Equatable {
         self.apps = apps
     }
 }
+
+public extension ConfigurationRecords {
+    /// Sets or clears a slot's pin pattern. Blank input clears it, so a
+    /// whitespace-only pattern can never claim the frontmost window.
+    mutating func setPinPattern(_ pattern: String?, bundleID: String, slot: Int) {
+        guard var slots = apps[bundleID],
+              let index = slots.firstIndex(where: { $0.slot == slot }) else { return }
+        let trimmed = pattern?.trimmingCharacters(in: .whitespacesAndNewlines)
+        slots[index].pinPattern = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        apps[bundleID] = slots
+    }
+
+    /// Drops every remembered window for an app (stale or unwanted records).
+    mutating func forgetApp(bundleID: String) {
+        apps.removeValue(forKey: bundleID)
+    }
+}
