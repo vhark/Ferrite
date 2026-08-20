@@ -103,12 +103,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         item.target = self
         item.indentationLevel = 1
         item.representedObject = bundle.name as NSString
-        if let shortcut = LayoutShortcuts.shortcut(forBundle: bundle.name) {
-            item.setShortcut(shortcut)
-        }
+        let shortcut = LayoutShortcuts.shortcut(forBundle: bundle.name)
         // A one-display workspace has nothing to disambiguate, so it acts directly.
         guard bundle.layouts.count > 1 else {
             item.action = #selector(launchBundle(_:))
+            if let shortcut { item.setShortcut(shortcut) }
             return item
         }
         let submenu = NSMenu()
@@ -116,6 +115,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                              action: #selector(launchBundle(_:)), keyEquivalent: "")
         all.target = self
         all.representedObject = bundle.name as NSString
+        // AppKit does not draw a key equivalent on a submenu parent, so the glyph
+        // goes on the row the hotkey actually triggers.
+        if let shortcut { all.setShortcut(shortcut) }
         submenu.addItem(all)
         for layout in bundle.layouts {
             // "(adapted)" warns that this display is absent, so the layout will
