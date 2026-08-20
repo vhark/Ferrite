@@ -58,3 +58,32 @@ public struct LayoutLibrary: Codable, Equatable {
         layouts.append(contentsOf: incoming)
     }
 }
+
+/// A named workspace: every saved layout sharing one name, one per display.
+/// Derived from the library rather than persisted — `upsert` already keys on
+/// (name, displayID), so same-name layouts across displays are a bundle.
+public struct LayoutBundle: Equatable {
+    public let name: String
+    public let layouts: [MonitorLayout]
+
+    public var spansMultipleDisplays: Bool {
+        Set(layouts.map(\.displayID)).count > 1
+    }
+
+    public init(name: String, layouts: [MonitorLayout]) {
+        self.name = name
+        self.layouts = layouts
+    }
+}
+
+public extension LayoutLibrary {
+    /// Bundles sorted by name; each bundle's layouts sorted by display name.
+    func bundles() -> [LayoutBundle] {
+        Dictionary(grouping: layouts, by: \.name)
+            .sorted { $0.key < $1.key }
+            .map { name, group in
+                LayoutBundle(name: name,
+                             layouts: group.sorted { $0.displayID < $1.displayID })
+            }
+    }
+}
