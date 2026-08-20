@@ -30,6 +30,60 @@ if arguments.contains("--login-status") || arguments.contains("--login-register"
     exit(0)
 }
 
+if let flagIndex = arguments.firstIndex(of: "--apply-bundle") {
+    guard AXPermission.isGranted else {
+        print("Accessibility permission not granted.")
+        exit(1)
+    }
+    guard flagIndex + 1 < arguments.count else {
+        print("usage: MacTLM --apply-bundle <name>")
+        exit(2)
+    }
+    let name = arguments[flagIndex + 1]
+    do {
+        // One-shot: no monitor, so settles fire on their own timers.
+        let coordinator = try PersistenceCoordinator()
+        let bundles = coordinator.loadBundles()
+        guard let bundle = bundles.first(where: { $0.name == name }) else {
+            print("no bundle named \(name); have: \(bundles.map(\.name))")
+            exit(3)
+        }
+        print("applying \(bundle.name): \(bundle.layouts.count) layout(s) across "
+              + "\(Set(bundle.layouts.map(\.displayID)).count) display(s)")
+        for layout in bundle.layouts {
+            print("  \(layout.displayName) [\(layout.displayID.prefix(8))] "
+                  + "\(layout.entries.count) entries")
+        }
+        coordinator.applyBundle(named: name)
+        // Let placement, settles and the activation cascade finish.
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 20))
+        print("done")
+        exit(0)
+    } catch {
+        print("failed: \(error)")
+        exit(4)
+    }
+}
+
+if arguments.contains("--list-displays") {
+    guard let primary = NSScreen.screens.first else {
+        print("no screens")
+        exit(1)
+    }
+    print("primary NSScreen frame: \(primary.frame)")
+    for display in ScreenGeometry.allDisplays {
+        print("\n\(display.name)  [\(display.info.id)]")
+        print("  metrics:  \(Int(display.info.width))x\(Int(display.info.height)) @\(display.info.scale)")
+        print("  CG area:  \(display.visibleArea)")
+    }
+    for screen in NSScreen.screens {
+        print("\nNSScreen \(screen.localizedName)")
+        print("  frame:        \(screen.frame)")
+        print("  visibleFrame: \(screen.visibleFrame)")
+    }
+    exit(0)
+}
+
 if arguments.contains("--list-windows") {
     guard AXPermission.isGranted else {
         print("Accessibility permission not granted. Run once without flags to request it.")
