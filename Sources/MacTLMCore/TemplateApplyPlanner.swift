@@ -33,6 +33,10 @@ public enum TemplateApplyPlanner {
         /// zIndex. Excluded apps appear here (they join the stacking cascade)
         /// even though they carry no placement.
         public let appStackingOrder: [String]
+        /// Each member's frontmost (lowest) zIndex on this display. Needed to
+        /// merge stacking orders across displays, where a bare rank in
+        /// `appStackingOrder` is not comparable between differing app counts.
+        public let appFrontmostZ: [String: Int]
 
         /// Pseudo-records for WindowMatcher when adopting a running app's windows.
         public func matchingRecords(forBundleID bundleID: String) -> [WindowRecord] {
@@ -97,6 +101,8 @@ public enum TemplateApplyPlanner {
         return ApplyPlan(adapted: adapted, appsToLaunch: appsToLaunch,
                          placements: placements, stageMode: layout.stageMode,
                          memberBundleIDs: Set(rankIndex.keys),
-                         appStackingOrder: appStackingOrder)
+                         appStackingOrder: appStackingOrder,
+                         appFrontmostZ: Dictionary(uniqueKeysWithValues:
+                             appRanks.map { ($0.bundleID, $0.frontmostZ) }))
     }
 }
