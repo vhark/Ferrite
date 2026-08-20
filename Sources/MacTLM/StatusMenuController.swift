@@ -64,8 +64,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(pause)
         menu.addItem(actionItem("Exclude Frontmost App", #selector(excludeFrontmost)))
         menu.addItem(.separator())
-        let login = actionItem("Launch at Login", #selector(toggleLoginItem))
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        let loginStatus = SMAppService.mainApp.status
+        let loginTitle = loginStatus == .requiresApproval
+            ? "Launch at Login (needs approval)"
+            : "Launch at Login"
+        let login = actionItem(loginTitle, #selector(toggleLoginItem))
+        login.state = loginStatus == .enabled ? .on : .off
         menu.addItem(login)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit MacTLM",
@@ -157,13 +161,47 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         do {
             if service.status == .enabled {
                 try service.unregister()
-                sender.state = .off
             } else {
                 try service.register()
-                sender.state = .on
             }
         } catch {
-            NSLog("Login item toggle failed: \(error)")
+            NSLog("MacTLM: login item toggle failed: %@", error.localizedDescription)
+            presentLoginItemAlert(
+                title: "Couldn't change Launch at Login",
+                message: error.localizedDescription,
+                offerSettings: false)
         }
+        // Re-read: register() can succeed yet still need user approval.
+        let status = service.status
+        sender.state = status == .enabled ? .on : .off
+        if status == .requiresApproval {
+            presentLoginItemAlert(
+                title: "Approval needed",
+                message: "macOS needs you to allow MacTLM in Login Items before it "
+                    + "can start automatically.",
+                offerSettings: true)
+        }
+    }
+
+    /// Shows a modal alert, optionally with a button that opens the
+    /// Login Items pane of System Settings.
+    private func presentLoginItemAlert(title: String, message: String,
+                                       offerSettings: Bool) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        if offerSettings {
+            alert.addButton(withTitle: "Open Login Items")
+            alert.addButton(withTitle: "Later")
+        } else {
+            alert.addButton(withTitle: "OK")
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        guard offerSettings, response == .alertFirstButtonReturn,
+              let url = URL(string:
+                "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 }

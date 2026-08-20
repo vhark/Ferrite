@@ -1,7 +1,34 @@
 import AppKit
 import MacTLMCore
+import ServiceManagement
 
 let arguments = CommandLine.arguments
+
+if arguments.contains("--login-status") || arguments.contains("--login-register")
+    || arguments.contains("--login-unregister") {
+    let service = SMAppService.mainApp
+    func describe(_ status: SMAppService.Status) -> String {
+        switch status {
+        case .notRegistered: return "notRegistered"
+        case .enabled: return "enabled"
+        case .requiresApproval: return "requiresApproval (approve in System Settings > Login Items)"
+        case .notFound: return "notFound"
+        @unknown default: return "unknown(\(status.rawValue))"
+        }
+    }
+    print("bundle path: \(Bundle.main.bundlePath)")
+    print("bundle id:   \(Bundle.main.bundleIdentifier ?? "nil")")
+    if arguments.contains("--login-register") {
+        do { try service.register(); print("register: ok") }
+        catch { print("register FAILED: \(error)") }
+    }
+    if arguments.contains("--login-unregister") {
+        do { try service.unregister(); print("unregister: ok") }
+        catch { print("unregister FAILED: \(error)") }
+    }
+    print("status: \(describe(service.status))")
+    exit(0)
+}
 
 if arguments.contains("--list-windows") {
     guard AXPermission.isGranted else {
