@@ -26,55 +26,34 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         menuLayouts.removeAll()
 
-        let library = coordinator.layoutLibraryStore.load()
-        let bundles = library.activeBundles()
-        // Archived workspaces vanish from the menu entirely, per-display rows
-        // included, but their layouts stay on disk.
-        let activeLayouts = library.layouts.filter {
-            !library.archivedBundleNames.contains($0.name)
-        }
-        let connectedIDs = Set(ScreenGeometry.allDisplays.map(\.info.id))
-        let byDisplay = Dictionary(grouping: activeLayouts, by: \.displayID)
-
-        // Workspaces: bundles whose layouts span more than one display.
-        let multiDisplay = bundles.filter(\.spansMultipleDisplays)
-        if !multiDisplay.isEmpty {
-            menu.addItem(sectionHeader("Workspaces (all displays)"))
-            for bundle in multiDisplay {
-                let item = NSMenuItem(title: bundle.name,
-                                      action: #selector(launchBundle(_:)),
-                                      keyEquivalent: "")
-                item.target = self
-                item.indentationLevel = 1
-                item.representedObject = bundle.name as NSString
-                if let shortcut = LayoutShortcuts.shortcut(forBundle: bundle.name) {
-                    item.setShortcut(shortcut)
-                }
-                menu.addItem(item)
+        // One row per workspace. Archived bundles are already excluded, so
+        // their layouts never surface here even though they stay on disk.
+        let connected = Set(ScreenGeometry.allDisplays.map(\.info.id))
+        var attached: [LayoutBundle] = []
+        var detached: [LayoutBundle] = []
+        for bundle in coordinator.loadBundles() {
+            if bundle.layoutsByConnection(connectedDisplayIDs: connected)
+                .connected.isEmpty {
+                detached.append(bundle)
+            } else {
+                attached.append(bundle)
             }
         }
 
-        // Sections per connected display.
-        for display in ScreenGeometry.allDisplays {
-            guard let layouts = byDisplay[display.info.id], !layouts.isEmpty else { continue }
-            menu.addItem(sectionHeader(display.name))
-            for layout in layouts.sorted(by: { $0.name < $1.name }) {
-                menu.addItem(layoutItem(layout, indent: 1))
+        if !attached.isEmpty {
+            menu.addItem(sectionHeader("Workspaces"))
+            for bundle in attached {
+                menu.addItem(workspaceItem(bundle, connectedDisplayIDs: connected))
             }
         }
 
-        // Inactive monitor layouts (collapsed submenu), adaptive launch.
-        let inactive = activeLayouts.filter { !connectedIDs.contains($0.displayID) }
-        if !inactive.isEmpty {
-            let parent = NSMenuItem(title: "Inactive Monitor Layouts",
+        // Workspaces with nothing attached collapse out of the way.
+        if !detached.isEmpty {
+            let parent = NSMenuItem(title: "Workspaces for other displays",
                                     action: nil, keyEquivalent: "")
             let submenu = NSMenu()
-            for (displayName, layouts) in Dictionary(grouping: inactive, by: \.displayName)
-                .sorted(by: { $0.key < $1.key }) {
-                submenu.addItem(sectionHeader(displayName))
-                for layout in layouts.sorted(by: { $0.name < $1.name }) {
-                    submenu.addItem(layoutItem(layout, indent: 1))
-                }
+            for bundle in detached {
+                submenu.addItem(workspaceItem(bundle, connectedDisplayIDs: connected))
             }
             parent.submenu = submenu
             menu.addItem(parent)
@@ -118,17 +97,41 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     // `LayoutShortcuts.shortcut(forBundle:)` and `NSMenuItem.setShortcut` are
     // main-actor bound; menu building already happens on the main actor.
     @MainActor
-    private func layoutItem(_ layout: MonitorLayout, indent: Int) -> NSMenuItem {
-        let title = layout.stageMode == .clearStage ? "\(layout.name) · clears stage" : layout.name
-        let item = NSMenuItem(title: title,
-                              action: #selector(launchLayout(_:)), keyEquivalent: "")
+    private func workspaceItem(_ bundle: LayoutBundle,
+                               connectedDisplayIDs: Set<String>) -> NSMenuItem {
+        let item = NSMenuItem(title: bundle.name, action: nil, keyEquivalent: "")
         item.target = self
-        item.indentationLevel = indent
-        item.representedObject = layout.id as NSUUID
-        if let shortcut = LayoutShortcuts.shortcut(forBundle: layout.name) {
+        item.indentationLevel = 1
+        item.representedObject = bundle.name as NSString
+        if let shortcut = LayoutShortcuts.shortcut(forBundle: bundle.name) {
             item.setShortcut(shortcut)
         }
-        menuLayouts[layout.id] = layout
+        // A one-display workspace has nothing to disambiguate, so it acts directly.
+        guard bundle.layouts.count > 1 else {
+            item.action = #selector(launchBundle(_:))
+            return item
+        }
+        let submenu = NSMenu()
+        let all = NSMenuItem(title: "All displays",
+                             action: #selector(launchBundle(_:)), keyEquivalent: "")
+        all.target = self
+        all.representedObject = bundle.name as NSString
+        submenu.addItem(all)
+        for layout in bundle.layouts {
+            // "(adapted)" warns that this display is absent, so the layout will
+            // be remapped onto whatever is attached.
+            let title = connectedDisplayIDs.contains(layout.displayID)
+                ? layout.displayName
+                : "\(layout.displayName) (adapted)"
+            let row = NSMenuItem(title: title,
+                                 action: #selector(launchSingleLayout(_:)),
+                                 keyEquivalent: "")
+            row.target = self
+            row.representedObject = layout.id as NSUUID
+            menuLayouts[layout.id] = layout
+            submenu.addItem(row)
+        }
+        item.submenu = submenu
         return item
     }
 
@@ -140,7 +143,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     // MARK: - Actions
 
-    @objc private func launchLayout(_ sender: NSMenuItem) {
+    @objc private func launchSingleLayout(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID,
               let layout = menuLayouts[id] else { return }
         coordinator.applyLayout(layout)

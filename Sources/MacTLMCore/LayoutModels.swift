@@ -185,3 +185,17 @@ public extension LayoutLibrary {
         layouts[layoutIndex].entries[index].optional = optional
     }
 }
+
+public extension LayoutBundle {
+    /// Splits the workspace's layouts by whether their display is attached
+    /// right now, preserving bundle order within each group.
+    func layoutsByConnection(connectedDisplayIDs: Set<String>)
+        -> (connected: [MonitorLayout], disconnected: [MonitorLayout]) {
+        (layouts.filter { connectedDisplayIDs.contains($0.displayID) },
+         layouts.filter { !connectedDisplayIDs.contains($0.displayID) })
+    }
+
+    func isFullyConnected(connectedDisplayIDs: Set<String>) -> Bool {
+        layouts.allSatisfy { connectedDisplayIDs.contains($0.displayID) }
+    }
+}

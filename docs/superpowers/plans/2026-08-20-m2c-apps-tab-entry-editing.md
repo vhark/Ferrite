@@ -472,3 +472,115 @@ git tag -a v0.4.0-m2c -m "M2c: Apps tab, pin editing, record cleanup, layout ent
 - **Type consistency:** `ConfigurationRecords.setPinPattern/forgetApp` (T1) consumed by `WindowTracker` (T2); `WindowTracker.allRecords/setPinPattern/forgetApp` (T2) consumed by the coordinator (T4); `AppRecordSummary` (T4) consumed by `AppsPreferencesView` (T5); `LayoutLibrary.removeEntry/setEntryOptional` (T3) consumed by the coordinator (T4) and the Layouts tab (T5).
 - **Deliberate omission:** no unit tests for the SwiftUI views (no headless surface), consistent with M1–M2b. Covered by Task 6.
 - **Dropped from the original sketch:** target-display picker and per-app merged placement — both need a second monitor to verify; they remain in `docs/BACKLOG.md`.
+
+---
+
+### Task 7 (amendment, added mid-execution): One workspace row, one submenu
+
+A second display arrived mid-milestone, which made the M2b menu design's defect visible: a workspace spanning two displays appeared in **three** places with identical labels — once under "Workspaces (all displays)" and once under each display's section — and only the first restored both screens. Clicking a per-display row faithfully restored one screen and left the other scrambled, which is indistinguishable from a bug.
+
+Measured evidence that the launcher itself is correct (2026-08-20): `--apply-bundle "Design&Print"` processed 2 layouts across 2 displays and placed both laptop windows pixel-exact (`crealityprint` → `(3045, 2198, 1986, 1291)`, `paseo` → `(3210, 2318, 1840, 1051)`, both matching computed expectations). The fix is therefore purely presentational.
+
+**New menu shape:** one row per workspace. Single-display workspaces act directly. Multi-display workspaces open a submenu: **All displays**, then one item per member display, each marked *(adapted)* when that display is not currently connected.
+
+**Files:**
+- Modify: `Sources/MacTLMCore/LayoutModels.swift`
+- Create: `Tests/MacTLMCoreTests/LayoutBundleConnectionTests.swift`
+- Modify: `Sources/MacTLM/StatusMenuController.swift`
+
+- [ ] **Step 1: Write the failing tests**
+
+`Tests/MacTLMCoreTests/LayoutBundleConnectionTests.swift`:
+```swift
+import XCTest
+@testable import MacTLMCore
+
+final class LayoutBundleConnectionTests: XCTestCase {
+    private func layout(_ display: String) -> MonitorLayout {
+        MonitorLayout(id: UUID(), name: "W", displayID: display,
+                      displayName: "D\(display)",
+                      displayMetrics: DisplayInfo(id: display, width: 1600,
+                                                  height: 1000, scale: 2.0),
+                      stageMode: .leaveOthers, entries: [],
+                      createdAt: Date(timeIntervalSince1970: 0))
+    }
+
+    func testSplitsConnectedFromDisconnected() {
+        let bundle = LayoutBundle(name: "W", layouts: [layout("A"), layout("B")])
+        let split = bundle.layoutsByConnection(connectedDisplayIDs: ["A"])
+        XCTAssertEqual(split.connected.map(\.displayID), ["A"])
+        XCTAssertEqual(split.disconnected.map(\.displayID), ["B"])
+    }
+
+    func testAllConnected() {
+        let bundle = LayoutBundle(name: "W", layouts: [layout("A"), layout("B")])
+        let split = bundle.layoutsByConnection(connectedDisplayIDs: ["A", "B"])
+        XCTAssertEqual(split.connected.count, 2)
+        XCTAssertTrue(split.disconnected.isEmpty)
+        XCTAssertTrue(bundle.isFullyConnected(connectedDisplayIDs: ["A", "B"]))
+    }
+
+    func testNoneConnected() {
+        let bundle = LayoutBundle(name: "W", layouts: [layout("A")])
+        let split = bundle.layoutsByConnection(connectedDisplayIDs: ["Z"])
+        XCTAssertTrue(split.connected.isEmpty)
+        XCTAssertEqual(split.disconnected.count, 1)
+        XCTAssertFalse(bundle.isFullyConnected(connectedDisplayIDs: ["Z"]))
+    }
+
+    func testPreservesLayoutOrderWithinEachGroup() {
+        let bundle = LayoutBundle(name: "W",
+                                  layouts: [layout("A"), layout("B"), layout("C")])
+        let split = bundle.layoutsByConnection(connectedDisplayIDs: ["C", "A"])
+        XCTAssertEqual(split.connected.map(\.displayID), ["A", "C"],
+                       "bundle layout order is preserved, not reordered by the set")
+    }
+}
+```
+
+- [ ] **Step 2: Run `swift test`** — expect FAIL: no member `layoutsByConnection`.
+
+- [ ] **Step 3: Implement in Core**
+
+Append to `Sources/MacTLMCore/LayoutModels.swift`:
+```swift
+public extension LayoutBundle {
+    /// Splits the workspace's layouts by whether their display is attached
+    /// right now, preserving bundle order within each group.
+    func layoutsByConnection(connectedDisplayIDs: Set<String>)
+        -> (connected: [MonitorLayout], disconnected: [MonitorLayout]) {
+        (layouts.filter { connectedDisplayIDs.contains($0.displayID) },
+         layouts.filter { !connectedDisplayIDs.contains($0.displayID) })
+    }
+
+    func isFullyConnected(connectedDisplayIDs: Set<String>) -> Bool {
+        layouts.allSatisfy { connectedDisplayIDs.contains($0.displayID) }
+    }
+}
+```
+
+- [ ] **Step 4: Run `swift test`** — PASS (4 new; 107 total).
+
+- [ ] **Step 5: Rebuild the menu's workspace listing**
+
+In `StatusMenuController.menuNeedsUpdate`, DELETE the three competing sections (the "Workspaces (all displays)" section, the per-connected-display sections, and the "Inactive Monitor Layouts" submenu) and replace them with a single **Workspaces** section over `coordinator.loadBundles()`:
+
+- Let `connected = Set(ScreenGeometry.allDisplays.map(\.info.id))`.
+- Split bundles into those with at least one connected display and those with none. The latter go into a collapsed **Workspaces for other displays** submenu at the end, same row shape.
+- **Row per workspace**, titled with the bundle name and carrying the bundle's hotkey via `setShortcut` (unchanged behavior):
+  - `bundle.layouts.count == 1` → direct action `launchBundle(_:)` (identical to today for single-display workspaces).
+  - otherwise → a **submenu**:
+    - `All displays` → `launchBundle(_:)` with `representedObject = bundle.name as NSString`.
+    - one item per layout in bundle order, titled `layout.displayName`, or `"\(layout.displayName) (adapted)"` when `!connected.contains(layout.displayID)`, action `launchSingleLayout(_:)` with `representedObject = layout.id as NSUUID`.
+- Add `@objc private func launchSingleLayout(_ sender: NSMenuItem)` resolving the UUID through `menuLayouts` and calling `coordinator.applyLayout(_:)`. Keep `menuLayouts` populated by whatever builds these rows.
+- `layoutItem(_:indent:)` is no longer used by the menu once per-display sections are gone; delete it if nothing else references it (check first), or keep it only if the submenu rows reuse it.
+
+Everything below (Save Current Arrangement, Restore All, Pause, Exclude Frontmost, Launch at Login, Preferences…, Quit) is unchanged.
+
+- [ ] **Step 6: Verify and commit**
+
+`swift build` clean, `swift test` 107 passing, `./scripts/make-app.sh` succeeds. Do not launch the app.
+```bash
+git add Sources docs Tests
+git commit -m "fix: one workspace row per layout set, with an explicit display submenu"
+```
