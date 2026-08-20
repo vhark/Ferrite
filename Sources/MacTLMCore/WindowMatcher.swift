@@ -13,9 +13,12 @@ public struct WindowCandidate: Equatable {
 
 /// Assigns remembered records to open windows:
 /// 1. pin patterns claim first, 2. exact titles, 3. remaining by order.
+/// Phase 3 is opt-out: pass `allowOrderFallback: false` when the open windows
+/// cannot be trusted to correspond to the remembered ones.
 public enum WindowMatcher {
     public static func assign(records: [WindowRecord],
-                              to windows: [WindowCandidate]) -> [Int: WindowRecord] {
+                              to windows: [WindowCandidate],
+                              allowOrderFallback: Bool = true) -> [Int: WindowRecord] {
         var result: [Int: WindowRecord] = [:]
         var freeRecords = records.sorted { $0.slot < $1.slot }
         var freeWindows = windows.sorted { $0.order < $1.order }
@@ -49,8 +52,10 @@ public enum WindowMatcher {
         for i in claimed.reversed() { freeRecords.remove(at: i) }
 
         // 3. Remaining pairs by order.
-        for (window, record) in zip(freeWindows, freeRecords) {
-            result[window.id] = record
+        if allowOrderFallback {
+            for (window, record) in zip(freeWindows, freeRecords) {
+                result[window.id] = record
+            }
         }
         return result
     }

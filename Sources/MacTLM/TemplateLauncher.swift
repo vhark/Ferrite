@@ -164,7 +164,10 @@ final class TemplateLauncher {
             WindowCandidate(id: window.id, title: window.title, order: index)
         }
         let records = plan.matchingRecords(forBundleID: bundleID)
-        let assignment = WindowMatcher.assign(records: records, to: candidates)
+        // Same count gate as placement, so raise order matches what was placed.
+        let assignment = WindowMatcher.assign(
+            records: records, to: candidates,
+            allowOrderFallback: windows.count >= records.count)
         // Records carry per-bundle slots, so placements index directly by slot.
         let placements = plan.placements.filter { $0.bundleID == bundleID }
         let backToFront = assignment

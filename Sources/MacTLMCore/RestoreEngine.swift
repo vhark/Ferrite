@@ -22,7 +22,13 @@ public final class RestoreEngine {
         let candidates = windows.enumerated().map { index, window in
             WindowCandidate(id: window.id, title: window.title, order: index)
         }
-        let assignment = WindowMatcher.assign(records: records, to: candidates)
+        // Order fallback is only safe when the app produced at least as many
+        // windows as we expect. A relaunched app showing fewer (e.g. a document
+        // app that restored nothing and is showing an Open dialog) must not have
+        // a transient window dragged into a remembered slot.
+        let allowOrderFallback = windows.count >= records.count
+        let assignment = WindowMatcher.assign(records: records, to: candidates,
+                                              allowOrderFallback: allowOrderFallback)
         var placed = 0
         for window in windows {
             guard let record = assignment[window.id] else { continue }

@@ -92,4 +92,23 @@ final class WindowMatcherTests: XCTestCase {
         XCTAssertEqual(result[10]?.slot, 1)
         XCTAssertEqual(result[11]?.slot, 0)
     }
+
+    func testOrderFallbackDisabledLeavesUnmatchedWindowsAlone() {
+        let records = [record(slot: 0, title: "Old A"), record(slot: 1, title: "Old B")]
+        let windows = [WindowCandidate(id: 10, title: "Open", order: 0)]
+        let result = WindowMatcher.assign(records: records, to: windows,
+                                          allowOrderFallback: false)
+        XCTAssertTrue(result.isEmpty, "no title match and no fallback -> nothing assigned")
+    }
+
+    func testOrderFallbackDisabledStillHonorsTitleAndPin() {
+        let records = [record(slot: 0, title: "Work", pin: "Work"),
+                       record(slot: 1, title: "Personal")]
+        let windows = [WindowCandidate(id: 10, title: "Personal", order: 0),
+                       WindowCandidate(id: 11, title: "Work", order: 1)]
+        let result = WindowMatcher.assign(records: records, to: windows,
+                                          allowOrderFallback: false)
+        XCTAssertEqual(result[11]?.slot, 0)
+        XCTAssertEqual(result[10]?.slot, 1)
+    }
 }

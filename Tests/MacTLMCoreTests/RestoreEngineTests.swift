@@ -97,4 +97,34 @@ final class RestoreEngineTests: XCTestCase {
         XCTAssertEqual(placed, 0)
         XCTAssertTrue(driver.setFrameCalls.isEmpty)
     }
+
+    func testFewerWindowsThanRecordsSkipsUnmatchedTransientWindow() {
+        let driver = FakeDriver()
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 1, title: "Open", frame: CGRect(x: 0, y: 25, width: 300, height: 300)),
+        ]
+        let records = [record(slot: 0, title: "alpha.txt",
+                              frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9)),
+                       record(slot: 1, title: "beta.txt",
+                              frame: NormalizedFrame(x: 0.5, y: 0, w: 0.25, h: 0.9))]
+        let placed = RestoreEngine(driver: driver)
+            .restore(records: records, bundleID: "app", visibleArea: area)
+        XCTAssertEqual(placed, 0)
+        XCTAssertTrue(driver.setFrameCalls.isEmpty, "transient window must not be placed")
+    }
+
+    func testFewerWindowsButTitleMatchStillPlaces() {
+        let driver = FakeDriver()
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 1, title: "beta.txt", frame: CGRect(x: 0, y: 25, width: 300, height: 300)),
+        ]
+        let records = [record(slot: 0, title: "alpha.txt",
+                              frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9)),
+                       record(slot: 1, title: "beta.txt",
+                              frame: NormalizedFrame(x: 0.5, y: 0, w: 0.25, h: 0.9))]
+        let placed = RestoreEngine(driver: driver)
+            .restore(records: records, bundleID: "app", visibleArea: area)
+        XCTAssertEqual(placed, 1)
+        XCTAssertEqual(driver.setFrameCalls.count, 1)
+    }
 }
