@@ -14,9 +14,10 @@ final class MacWindowDriver: WindowDriving {
         var result: [DriverWindow] = []
         var ids: [Int] = []
         for app in apps {
+            guard !app.isHidden else { continue }
             let handle = AXAppHandle(pid: app.processIdentifier)
             for window in handle.windows {
-                guard window.isStandardWindow,
+                guard window.isStandardWindow, !window.isMinimized,
                       let frame = window.frame, frame.width > 1, frame.height > 1
                 else { continue }
                 handleCache[window.stableID] = window

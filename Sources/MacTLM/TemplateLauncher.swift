@@ -130,26 +130,55 @@ final class TemplateLauncher {
         MissingAppNotifier.notify(missing: missing)
     }
 
-    /// Raise members backmost-first so the frontmost ends up on top.
+    /// Restores stacking across apps: activate member apps backmost-first
+    /// (spaced so each activation lands), raising each app's own windows
+    /// back-to-front as we go. The app owning zIndex 0 ends up frontmost.
     private func restoreStacking(plan: TemplateApplyPlanner.ApplyPlan) {
-        let byBundle = Dictionary(grouping: plan.placements, by: \.bundleID)
-        var raiseList: [(zIndex: Int, bundleID: String, slot: Int)] = []
-        for (bundleID, placements) in byBundle {
-            for (slot, placement) in placements.enumerated() {
-                raiseList.append((placement.zIndex, bundleID, slot))
+        defer { inFlight = nil }
+        // Frontmost (lowest zIndex) placement per bundle decides app order.
+        var frontmostZ: [String: Int] = [:]
+        for placement in plan.placements {
+            let current = frontmostZ[placement.bundleID] ?? Int.max
+            frontmostZ[placement.bundleID] = min(current, placement.zIndex)
+        }
+        // Backmost app first, so the last activation leaves z=0's app in front.
+        let appOrder = frontmostZ.sorted { $0.value > $1.value }.map(\.key)
+        for (step, bundleID) in appOrder.enumerated() {
+            let delay = Double(step) * 0.06
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.activateAndRaise(bundleID: bundleID, plan: plan)
             }
         }
-        for item in raiseList.sorted(by: { $0.zIndex > $1.zIndex }) {
-            let windows = driver.windows(ofBundleID: item.bundleID)
-            let candidates = windows.enumerated().map { index, window in
-                WindowCandidate(id: window.id, title: window.title, order: index)
-            }
-            let records = plan.matchingRecords(forBundleID: item.bundleID)
-            let assignment = WindowMatcher.assign(records: records, to: candidates)
-            guard let (windowID, _) = assignment.first(where: { $0.value.slot == item.slot }),
-                  let handle = driver.handle(forWindowID: windowID) else { continue }
+    }
+
+    /// Brings one member app forward, then raises its own windows
+    /// backmost-first so the app's internal order matches the template.
+    private func activateAndRaise(bundleID: String,
+                                  plan: TemplateApplyPlanner.ApplyPlan) {
+        for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        where !app.isHidden {
+            app.activate(options: [])
+        }
+        let windows = driver.windows(ofBundleID: bundleID)
+        let candidates = windows.enumerated().map { index, window in
+            WindowCandidate(id: window.id, title: window.title, order: index)
+        }
+        let records = plan.matchingRecords(forBundleID: bundleID)
+        let assignment = WindowMatcher.assign(records: records, to: candidates)
+        // Records carry per-bundle slots, so placements index directly by slot.
+        let placements = plan.placements.filter { $0.bundleID == bundleID }
+        let backToFront = assignment
+            .map { (windowID: $0.key, zIndex: zIndex(ofSlot: $0.value.slot, in: placements)) }
+            .sorted { $0.zIndex > $1.zIndex }
+        for entry in backToFront {
+            guard let handle = driver.handle(forWindowID: entry.windowID) else { continue }
             AXUIElementPerformAction(handle.element, kAXRaiseAction as CFString)
         }
-        inFlight = nil
+    }
+
+    /// Template zIndex for a per-bundle slot; unknown slots raise first.
+    private func zIndex(ofSlot slot: Int,
+                        in placements: [TemplateApplyPlanner.Placement]) -> Int {
+        slot < placements.count ? placements[slot].zIndex : Int.max
     }
 }

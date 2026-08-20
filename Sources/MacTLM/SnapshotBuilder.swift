@@ -12,10 +12,11 @@ enum SnapshotBuilder {
         where app.activationPolicy == .regular {
             guard let bundleID = app.bundleIdentifier,
                   bundleID != Bundle.main.bundleIdentifier,
+                  !app.isHidden,
                   seenBundles.insert(bundleID).inserted else { continue }
             let appHandle = AXAppHandle(pid: app.processIdentifier)
             for window in appHandle.windows {
-                guard window.isStandardWindow,
+                guard window.isStandardWindow, !window.isMinimized,
                       let frame = window.frame, frame.width > 1, frame.height > 1
                 else { continue }
                 let id = window.stableID

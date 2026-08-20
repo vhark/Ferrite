@@ -24,6 +24,12 @@ final class AXWindowHandle {
         (copyValue(kAXSubroleAttribute) as? String) == (kAXStandardWindowSubrole as String)
     }
 
+    /// Minimized windows keep a stale on-screen frame and must never become
+    /// layout members: raising one un-minimizes it behind the user's back.
+    var isMinimized: Bool {
+        (copyValue(kAXMinimizedAttribute) as? Bool) == true
+    }
+
     var frame: CGRect? {
         guard let positionValue = copyValue(kAXPositionAttribute),
               let sizeValue = copyValue(kAXSizeAttribute),
