@@ -1146,3 +1146,186 @@ git tag -a v0.3.0-m2b -m "M2b: bundles, per-bundle hotkeys, Layouts preferences"
 - **Type consistency:** `LayoutBundle`/`bundles()` (T2) consumed by T5, T6, T7, T8; `MultiApplyPlanner.plan(requests:runningBundleIDs:excludedBundleIDs:)` (T3) consumed by T4; `LayoutShortcuts.name(forBundle:)` (T5) consumed by T7's Recorder and T8's `setShortcut`; coordinator's `loadBundles`/`renameBundle`/`deleteBundle`/`setStageMode` (T6) consumed by T7's model.
 - **Dependency risk:** KeyboardShortcuts 3.0.1 is pinned as the floor specifically because it fixes a release-build crash under Swift 6.3; `swift build -c release` is verified in Task 1 rather than only at install time.
 - **Deliberate omission:** no unit tests for the SwiftUI view or the window controller — no headless surface. They are covered by Task 9's live protocol, consistent with how the AppKit layer has been treated since M1.
+
+---
+
+### Task 10 (amendment, added mid-execution): Archive instead of delete
+
+Requested after Task 9 began: deleting a workspace was one irreversible click. Layouts are now **archived** (reversible, greyed out, hidden from the menu) and can only be permanently deleted from the archive, behind a confirmation.
+
+**Archiving preserves the recorded hotkey** — the assignment lives in `UserDefaults` under the bundle name, and archiving merely stops registering a handler for it. Restoring re-registers the same shortcut.
+
+**Files:**
+- Modify: `Sources/MacTLMCore/LayoutModels.swift`
+- Modify: `Sources/MacTLM/PersistenceCoordinator.swift`
+- Modify: `Sources/MacTLM/LayoutsPreferencesView.swift`
+- Modify: `Sources/MacTLM/StatusMenuController.swift`
+- Create: `Tests/MacTLMCoreTests/LayoutArchiveTests.swift`
+
+#### CRITICAL: JSON backward compatibility
+
+The user's live `layouts.json` has no archive key, and `LayoutLibraryStore.load()` is fail-soft — a decode failure silently yields an EMPTY library, and the next save would overwrite their real workspace with nothing. `archivedBundleNames` MUST therefore decode as absent-tolerant, and the test below MUST exist.
+
+- [ ] **Step 1: Write the failing tests**
+
+`Tests/MacTLMCoreTests/LayoutArchiveTests.swift`:
+```swift
+import XCTest
+@testable import MacTLMCore
+
+final class LayoutArchiveTests: XCTestCase {
+    private func layout(_ name: String, display: String = "A") -> MonitorLayout {
+        MonitorLayout(id: UUID(), name: name, displayID: display,
+                      displayName: "D\(display)",
+                      displayMetrics: DisplayInfo(id: display, width: 1600,
+                                                  height: 1000, scale: 2.0),
+                      stageMode: .leaveOthers, entries: [],
+                      createdAt: Date(timeIntervalSince1970: 0))
+    }
+
+    func testLegacyJSONWithoutArchiveKeyStillDecodes() throws {
+        // Exactly the shape written before this task existed.
+        let json = """
+        {"layouts":[{"createdAt":"2026-08-19T00:00:00Z","displayID":"A",
+        "displayMetrics":{"height":1000,"id":"A","scale":2,"width":1600},
+        "displayName":"DA","entries":[],"id":"AAAAAAAA-0000-0000-0000-000000000001",
+        "name":"Design&Comms","stageMode":"leaveOthers"}]}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let library = try decoder.decode(LayoutLibrary.self,
+                                         from: Data(json.utf8))
+        XCTAssertEqual(library.layouts.count, 1, "legacy file must not decode as empty")
+        XCTAssertTrue(library.archivedBundleNames.isEmpty)
+    }
+
+    func testArchiveHidesFromActiveButKeepsLayout() {
+        var library = LayoutLibrary(layouts: [layout("Work"), layout("Play")])
+        library.archiveBundle(named: "Play")
+        XCTAssertEqual(library.activeBundles().map(\.name), ["Work"])
+        XCTAssertEqual(library.archivedBundles().map(\.name), ["Play"])
+        XCTAssertEqual(library.layouts.count, 2, "archiving must not drop layouts")
+    }
+
+    func testRestoreBringsItBack() {
+        var library = LayoutLibrary(layouts: [layout("Play")])
+        library.archiveBundle(named: "Play")
+        library.restoreBundle(named: "Play")
+        XCTAssertEqual(library.activeBundles().map(\.name), ["Play"])
+        XCTAssertTrue(library.archivedBundleNames.isEmpty)
+    }
+
+    func testDeleteBundleRemovesLayoutsAndArchiveEntry() {
+        var library = LayoutLibrary(layouts: [layout("Play", display: "A"),
+                                              layout("Play", display: "B")])
+        library.archiveBundle(named: "Play")
+        library.deleteBundle(named: "Play")
+        XCTAssertTrue(library.layouts.isEmpty)
+        XCTAssertTrue(library.archivedBundleNames.isEmpty,
+                      "no orphan archive entry left behind")
+    }
+
+    func testSavingOverAnArchivedNameReactivatesIt() {
+        var library = LayoutLibrary(layouts: [layout("Work")])
+        library.archiveBundle(named: "Work")
+        library.upsert([layout("Work")])
+        XCTAssertEqual(library.activeBundles().map(\.name), ["Work"],
+                       "re-saving an archived name brings it back")
+    }
+
+    func testArchiveRoundTripsThroughJSON() throws {
+        var library = LayoutLibrary(layouts: [layout("Work")])
+        library.archiveBundle(named: "Work")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(LayoutLibrary.self,
+                                         from: try encoder.encode(library))
+        XCTAssertEqual(decoded.archivedBundleNames, ["Work"])
+    }
+}
+```
+
+- [ ] **Step 2: Run `swift test`** — expect FAIL: no member `archivedBundleNames`.
+
+- [ ] **Step 3: Implement in Core**
+
+In `Sources/MacTLMCore/LayoutModels.swift`, extend `LayoutLibrary` with the archive set and absent-tolerant decoding:
+```swift
+public struct LayoutLibrary: Codable, Equatable {
+    public var layouts: [MonitorLayout]
+    /// Bundle names hidden from the menu and from hotkey registration.
+    /// Archiving is reversible; only the archive can permanently delete.
+    public var archivedBundleNames: Set<String>
+
+    public init(layouts: [MonitorLayout] = [],
+                archivedBundleNames: Set<String> = []) {
+        self.layouts = layouts
+        self.archivedBundleNames = archivedBundleNames
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case layouts, archivedBundleNames
+    }
+
+    /// Absent-tolerant: files written before archiving existed have no
+    /// `archivedBundleNames` key and MUST still decode (a failure here would
+    /// make the fail-soft store load an empty library and lose real layouts).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        layouts = try container.decodeIfPresent([MonitorLayout].self,
+                                                forKey: .layouts) ?? []
+        archivedBundleNames = try container.decodeIfPresent(
+            Set<String>.self, forKey: .archivedBundleNames) ?? []
+    }
+}
+```
+Add the mutations and accessors:
+```swift
+public extension LayoutLibrary {
+    /// Active (non-archived) bundles, and archived ones, both name-sorted.
+    func activeBundles() -> [LayoutBundle] {
+        bundles().filter { !archivedBundleNames.contains($0.name) }
+    }
+
+    func archivedBundles() -> [LayoutBundle] {
+        bundles().filter { archivedBundleNames.contains($0.name) }
+    }
+
+    mutating func archiveBundle(named name: String) {
+        guard layouts.contains(where: { $0.name == name }) else { return }
+        archivedBundleNames.insert(name)
+    }
+
+    mutating func restoreBundle(named name: String) {
+        archivedBundleNames.remove(name)
+    }
+}
+```
+Then: `deleteBundle(named:)` must also `archivedBundleNames.remove(name)`, `renameBundle(from:to:)` must carry an archived flag across the rename, and `upsert(_:)` must remove incoming names from `archivedBundleNames` (re-saving reactivates).
+
+- [ ] **Step 4: Run `swift test`** — PASS (6 new; 90 total).
+
+- [ ] **Step 5: Coordinator, menu, and hotkeys respect the archive**
+
+- `PersistenceCoordinator`: add `archiveBundle(named:)` and `restoreBundle(named:)` (save, then `refreshShortcuts()`); keep `deleteBundle(named:)` as the permanent delete (it already clears the shortcut).
+- `refreshShortcuts()` registers from `activeBundles()` only, so an archived workspace's hotkey stops firing while archived and works again after restore.
+- `loadBundles()` returns active bundles; add `loadArchivedBundles()`.
+- `StatusMenuController.menuNeedsUpdate` uses active bundles for both the Workspaces section and the per-display sections, so archived layouts vanish from the menu.
+
+- [ ] **Step 6: Preferences UI**
+
+In `LayoutsPreferencesView`: two `Section`s — "Layouts" (active) and "Archived" (only when non-empty). Active rows keep Rename plus a new **Archive** button (no confirmation — it is reversible). Archived rows are greyed (`.foregroundStyle(.secondary)`), hide the recorder and stage toggle, and offer **Restore** and **Delete Permanently**. Only Delete Permanently confirms, via an `NSAlert` (or `.confirmationDialog`) whose default button is Cancel:
+
+> Delete "<name>" permanently? · This removes the saved window positions for every display in this workspace. This cannot be undone.
+
+The model gains `archivedBundles`, `archive(bundleName:)`, `restore(bundleName:)`, and `deletePermanently(bundleName:)`, each reloading afterwards.
+
+- [ ] **Step 7: Verify and commit**
+
+`swift build` clean, `swift test` 90 passing, `./scripts/make-app.sh` succeeds.
+```bash
+git add -A Sources Tests docs
+git commit -m "feat: archive layouts instead of deleting, delete only from archive"
+```
