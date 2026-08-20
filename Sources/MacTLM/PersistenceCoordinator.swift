@@ -139,7 +139,14 @@ final class PersistenceCoordinator {
     }
 
     func applyLayout(_ layout: MonitorLayout) {
-        templateLauncher.apply(layout, excludedBundleIDs: currentExcludedBundleIDs)
+        templateLauncher.apply([layout], excludedBundleIDs: currentExcludedBundleIDs)
+    }
+
+    /// Launches every layout sharing this name — the whole workspace.
+    func applyBundle(named name: String) {
+        let layouts = layoutLibraryStore.load().layouts.filter { $0.name == name }
+        guard !layouts.isEmpty else { return }
+        templateLauncher.apply(layouts, excludedBundleIDs: currentExcludedBundleIDs)
     }
 
     func deleteLayout(id: UUID) {
