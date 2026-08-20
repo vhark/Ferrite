@@ -11,6 +11,10 @@ Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpower
 
 Test suite: 67 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit layer is verified by live protocol, not unit tests.
 
+## Pending verification
+
+- **PRD §9 full acceptance run (M2a).** Steps 1–5 of the M2a acceptance protocol passed live on 2026-08-19: clean per-display capture, pixel-exact frame restore (verified by reading back AX frames), cross-app stacking, adopt-running/launch-missing, clear-stage hiding, and replace-on-re-save. Step 6 — quit Illustrator / Arc / Paseo / Nextcloud Talk / Finder, then launch `Design&Comms` and confirm every app relaunches into place — was deferred by choice because it disrupts a live working session. `Design&Comms` is captured and stored (9 windows, `clearStage`), so the run is ready whenever convenient.
+
 ## Platform findings (paid for in blood, do not regress)
 
 1. **`AXManualAccessibility` must be applied lazily.** Setting it eagerly on every app poisons **Finder**: its `kAXWindowsAttribute` returns an empty array (AXError `.success`, zero windows) process-wide for the life of that Finder process. Finder was silently missing from every capture until this was found. It is now set only as a fallback when an app's first window query comes back empty (the Electron case it exists for). `AppObserver` must **not** set it either — the attribute is process-wide, so one eager write anywhere re-breaks Finder.
