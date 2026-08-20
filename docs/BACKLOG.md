@@ -8,12 +8,15 @@ Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpower
 |---|---|---|
 | `v0.1.0-m1` | Position persistence | Automatic per-app window capture, restore on launch / login / display change, exclude list, pin rules (JSON), menu bar app |
 | `v0.2.0-m2a` | Workspace templates (engine + menu) | Whole-desktop snapshots per display, adopt-running/launch-missing, frame + cross-app stacking restore, stage modes, adaptive launch onto another display, dynamic per-monitor menu |
+| `v0.2.1-m2a` | Stacking correctness | Excluded and late-launching apps join the template z-order cascade; apps launch backmost-first |
 
-Test suite: 67 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit layer is verified by live protocol, not unit tests.
+**PRD §9 acceptance: PASSED** live on 2026-08-19 — `Design&Comms` restored from a cold start (Illustrator, both Arcs, Paseo, Nextcloud Talk, Finder, Spotify, Obsidian, Rambox), apps relaunching into place one by one. The single defect it exposed (Illustrator covering the layout) is fixed in `v0.2.1-m2a` and re-verified.
+
+Test suite: 70 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit layer is verified by live protocol, not unit tests.
 
 ## Pending verification
 
-- **PRD §9 full acceptance run (M2a).** Steps 1–5 of the M2a acceptance protocol passed live on 2026-08-19: clean per-display capture, pixel-exact frame restore (verified by reading back AX frames), cross-app stacking, adopt-running/launch-missing, clear-stage hiding, and replace-on-re-save. Step 6 — quit Illustrator / Arc / Paseo / Nextcloud Talk / Finder, then launch `Design&Comms` and confirm every app relaunches into place — was deferred by choice because it disrupts a live working session. `Design&Comms` is captured and stored (9 windows, `clearStage`), so the run is ready whenever convenient.
+- **Late-arrival restacking (Fix C, `06a98d1`).** When the 15s launch deadline fires before a slow app draws a window, `inFlight` is now retained (`reportedMissing`) so the app rejoins the z-order when it finally settles, with a 120s hard stop. Only reachable on a cold launch of a slow app; not yet observed live. The next full quit-and-relaunch of `Design&Comms` exercises it.
 
 ## Platform findings (paid for in blood, do not regress)
 
@@ -24,6 +27,7 @@ Test suite: 67 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit layer
 5. **Cross-app stacking needs app activation, not just `AXRaise`.** `AXRaise` orders windows *within* an app. Restoring a scene requires activating member apps backmost-first (spaced ~60ms so each activation lands), raising each app's own windows back-to-front inside its step.
 6. **Ad-hoc signing re-keys TCC on every rebuild.** The Accessibility grant is bound to the code signature's designated requirement; `codesign -s -` changes the cdhash per build, so the grant silently dies and System Settings shows a stale enabled toggle. Fixed by signing with a self-signed **"MacTLM Dev"** identity (`scripts/make-app.sh` prefers it, falls back to ad-hoc). Toggling the grant while the app runs does not help; a stale entry must be removed and re-added, or reset with `tccutil reset Accessibility dev.mactlm.MacTLM`.
 7. **`--list-windows` reports zero-window apps** with their raw AX window count and `AXError`. Findings 1 and 2 were both discovered through it; keep it.
+8. **Excluded apps must still join the stacking cascade.** They are launch-only (frames never touched, PRD §9), so deriving activation order from `placements` silently omitted them — Illustrator launched last, activated itself, and covered the whole layout. `ApplyPlan.appStackingOrder` now ranks every active member by its frontmost window's zIndex, excluded ones included; `activateAndRaise` activates such an app without enumerating or raising its windows. Related: launch *start* order is not window *appearance* order, so launching backmost-first is a head start, never a guarantee — the cascade is what's authoritative.
 
 ## M2b (next milestone)
 
