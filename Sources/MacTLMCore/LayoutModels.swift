@@ -160,3 +160,28 @@ public extension LayoutLibrary {
         }
     }
 }
+
+public extension LayoutLibrary {
+    /// Removes one window from a layout and reindexes zIndex contiguously so
+    /// the remaining windows keep a well-ordered stacking sequence.
+    mutating func removeEntry(atIndex index: Int, fromLayoutID layoutID: UUID) {
+        guard let layoutIndex = layouts.firstIndex(where: { $0.id == layoutID }),
+              layouts[layoutIndex].entries.indices.contains(index) else { return }
+        layouts[layoutIndex].entries.remove(at: index)
+        let reordered = layouts[layoutIndex].entries
+            .enumerated()
+            .sorted { $0.element.zIndex < $1.element.zIndex }
+        var rebuilt = layouts[layoutIndex].entries
+        for (newZ, pair) in reordered.enumerated() {
+            rebuilt[pair.offset].zIndex = newZ
+        }
+        layouts[layoutIndex].entries = rebuilt
+    }
+
+    mutating func setEntryOptional(_ optional: Bool, atIndex index: Int,
+                                   inLayoutID layoutID: UUID) {
+        guard let layoutIndex = layouts.firstIndex(where: { $0.id == layoutID }),
+              layouts[layoutIndex].entries.indices.contains(index) else { return }
+        layouts[layoutIndex].entries[index].optional = optional
+    }
+}
