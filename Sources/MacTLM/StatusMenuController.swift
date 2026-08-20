@@ -82,7 +82,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     private func layoutItem(_ layout: MonitorLayout, indent: Int) -> NSMenuItem {
-        let item = NSMenuItem(title: layout.name,
+        let title = layout.stageMode == .clearStage ? "\(layout.name) · clears stage" : layout.name
+        let item = NSMenuItem(title: title,
                               action: #selector(launchLayout(_:)), keyEquivalent: "")
         item.target = self
         item.indentationLevel = indent
@@ -109,17 +110,26 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let alert = NSAlert()
         alert.messageText = "Save Current Arrangement"
         alert.informativeText = "Name this layout. Windows on each display are saved per monitor."
-        let field = NSTextField(frame: NSRect(x: 0, y: 28, width: 260, height: 24))
+        let nameLabel = NSTextField(frame: NSRect(x: 0, y: 56, width: 320, height: 16))
+        nameLabel.stringValue = "Layout name"
+        nameLabel.isEditable = false
+        nameLabel.isBordered = false
+        nameLabel.drawsBackground = false
+        nameLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        nameLabel.textColor = .secondaryLabelColor
+        let field = NSTextField(frame: NSRect(x: 0, y: 30, width: 320, height: 24))
         field.placeholderString = "Layout name"
         let clearStage = NSButton(checkboxWithTitle: "Hide other apps when launching",
                                   target: nil, action: nil)
-        clearStage.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 56))
+        clearStage.frame = NSRect(x: 0, y: 0, width: 320, height: 18)
+        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 76))
+        accessory.addSubview(nameLabel)
         accessory.addSubview(field)
         accessory.addSubview(clearStage)
         alert.accessoryView = accessory
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespaces)
