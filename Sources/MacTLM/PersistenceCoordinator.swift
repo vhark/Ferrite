@@ -152,11 +152,30 @@ final class PersistenceCoordinator {
         templateLauncher.apply(layouts, excludedBundleIDs: currentExcludedBundleIDs)
     }
 
-    func deleteLayout(id: UUID) {
+    func renameBundle(from oldName: String, to newName: String) {
         var library = layoutLibraryStore.load()
-        library.layouts.removeAll { $0.id == id }
+        library.renameBundle(from: oldName, to: newName)
         try? layoutLibraryStore.save(library)
+        LayoutShortcuts.migrate(from: oldName, to: newName)
         refreshShortcuts()
+    }
+
+    func deleteBundle(named name: String) {
+        var library = layoutLibraryStore.load()
+        library.deleteBundle(named: name)
+        try? layoutLibraryStore.save(library)
+        LayoutShortcuts.clear(bundleName: name)
+        refreshShortcuts()
+    }
+
+    func setStageMode(_ mode: StageMode, forBundleNamed name: String) {
+        var library = layoutLibraryStore.load()
+        library.setStageMode(mode, forBundleNamed: name)
+        try? layoutLibraryStore.save(library)
+    }
+
+    func loadBundles() -> [LayoutBundle] {
+        layoutLibraryStore.load().bundles()
     }
 
     /// Re-reads the library and registers a hotkey handler per bundle.

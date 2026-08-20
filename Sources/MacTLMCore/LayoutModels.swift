@@ -87,3 +87,29 @@ public extension LayoutLibrary {
             }
     }
 }
+
+public extension LayoutLibrary {
+    /// Renames every layout in a bundle. If the new name collides on a display,
+    /// the renamed layout wins (same rule as `upsert`).
+    mutating func renameBundle(from oldName: String, to newName: String) {
+        guard oldName != newName else { return }
+        let renamed = layouts.filter { $0.name == oldName }.map { layout -> MonitorLayout in
+            var copy = layout
+            copy.name = newName
+            return copy
+        }
+        guard !renamed.isEmpty else { return }
+        layouts.removeAll { $0.name == oldName }
+        upsert(renamed)
+    }
+
+    mutating func deleteBundle(named name: String) {
+        layouts.removeAll { $0.name == name }
+    }
+
+    mutating func setStageMode(_ mode: StageMode, forBundleNamed name: String) {
+        for index in layouts.indices where layouts[index].name == name {
+            layouts[index].stageMode = mode
+        }
+    }
+}
