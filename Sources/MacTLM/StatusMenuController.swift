@@ -7,6 +7,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         withLength: NSStatusItem.squareLength)
     private let coordinator: PersistenceCoordinator
     private var menuLayouts: [UUID: MonitorLayout] = [:]
+    private lazy var preferences = PreferencesWindowController(coordinator: coordinator)
 
     init(coordinator: PersistenceCoordinator) {
         self.coordinator = coordinator
@@ -71,6 +72,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let login = actionItem(loginTitle, #selector(toggleLoginItem))
         login.state = loginStatus == .enabled ? .on : .off
         menu.addItem(login)
+        menu.addItem(actionItem("Layouts…", #selector(showPreferences)))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit MacTLM",
                                 action: #selector(NSApplication.terminate(_:)),
@@ -144,6 +146,8 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func restoreAll() { coordinator.restoreAll() }
+
+    @objc private func showPreferences() { preferences.show() }
 
     @objc private func togglePause(_ sender: NSMenuItem) {
         coordinator.isPaused.toggle()
