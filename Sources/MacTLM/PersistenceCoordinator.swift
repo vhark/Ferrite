@@ -134,7 +134,7 @@ final class PersistenceCoordinator {
         let layouts = SnapshotBuilder.snapshot(name: name, stageMode: stageMode)
         guard !layouts.isEmpty else { return }
         var library = layoutLibraryStore.load()
-        library.layouts.append(contentsOf: layouts)
+        library.upsert(layouts)
         try? layoutLibraryStore.save(library)
     }
 

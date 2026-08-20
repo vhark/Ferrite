@@ -48,4 +48,34 @@ final class LayoutLibraryStoreTests: XCTestCase {
         try Data("nope{".utf8).write(to: url)
         XCTAssertEqual(LayoutLibraryStore(url: url).load(), LayoutLibrary())
     }
+
+    func testUpsertReplacesSameNameSameDisplay() {
+        var library = LayoutLibrary(layouts: [sampleLayout()])
+        var resnapshot = sampleLayout()
+        resnapshot.id = UUID(uuidString: "BBBBBBBB-0000-0000-0000-000000000002")!
+        resnapshot.entries = [
+            LayoutEntry(bundleID: "company.thebrowser.Browser", title: "Work",
+                        frame: NormalizedFrame(x: 0, y: 0, w: 1, h: 1),
+                        zIndex: 0, pinPattern: nil, optional: false),
+        ]
+        library.upsert([resnapshot])
+        XCTAssertEqual(library.layouts.count, 1)
+        XCTAssertEqual(library.layouts[0].entries.count, 1)
+        XCTAssertEqual(library.layouts[0].id, resnapshot.id)
+    }
+
+    func testUpsertKeepsOtherDisplaysAndNames() {
+        var library = LayoutLibrary(layouts: [sampleLayout()])
+        var otherDisplay = sampleLayout()
+        otherDisplay.id = UUID()
+        otherDisplay.displayID = "OTHER"
+        library.upsert([otherDisplay])
+        XCTAssertEqual(library.layouts.count, 2)
+
+        var otherName = sampleLayout()
+        otherName.id = UUID()
+        otherName.name = "Other Scene"
+        library.upsert([otherName])
+        XCTAssertEqual(library.layouts.count, 3)
+    }
 }

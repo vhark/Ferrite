@@ -49,4 +49,12 @@ public struct LayoutLibrary: Codable, Equatable {
     public init(layouts: [MonitorLayout] = []) {
         self.layouts = layouts
     }
+
+    /// Replaces layouts sharing a (name, displayID) key with the incoming ones,
+    /// appending the rest. Re-snapshotting a name edits it in place (PRD §3.2).
+    public mutating func upsert(_ incoming: [MonitorLayout]) {
+        let keys = Set(incoming.map { "\($0.name)\u{0}\($0.displayID)" })
+        layouts.removeAll { keys.contains("\($0.name)\u{0}\($0.displayID)") }
+        layouts.append(contentsOf: incoming)
+    }
 }
