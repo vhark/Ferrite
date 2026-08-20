@@ -128,8 +128,7 @@ final class PersistenceCoordinator {
     }
 
     func exclude(bundleID: String) {
-        excludeList.bundleIDs.insert(bundleID)
-        try? excludeList.save(to: excludeURL)
+        setExcluded(true, bundleID: bundleID)
     }
 
     func saveCurrentArrangement(name: String, stageMode: StageMode) {
@@ -197,6 +196,69 @@ final class PersistenceCoordinator {
 
     func loadArchivedBundles() -> [LayoutBundle] {
         layoutLibraryStore.load().archivedBundles()
+    }
+
+    // MARK: - Preferences surface
+
+    /// One row per app with remembered windows, for the Apps tab.
+    struct AppRecordSummary: Identifiable {
+        let bundleID: String
+        let displayName: String
+        let slots: [WindowRecord]
+        let isExcluded: Bool
+        var id: String { bundleID }
+    }
+
+    func appRecordSummaries() -> [AppRecordSummary] {
+        let excluded = excludeList.bundleIDs
+        return tracker.allRecords()
+            .map { bundleID, slots in
+                AppRecordSummary(
+                    bundleID: bundleID,
+                    displayName: Self.localizedAppName(forBundleID: bundleID),
+                    slots: slots.sorted { $0.slot < $1.slot },
+                    isExcluded: excluded.contains(bundleID))
+            }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+                == .orderedAscending }
+    }
+
+    /// Best-effort human name; falls back to the bundle ID for apps that are
+    /// not installed any more (stale records are exactly what this tab cleans).
+    private static func localizedAppName(forBundleID bundleID: String) -> String {
+        guard let url = NSWorkspace.shared
+            .urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
+        return FileManager.default.displayName(atPath: url.path)
+    }
+
+    func setPinPattern(_ pattern: String?, bundleID: String, slot: Int) {
+        tracker.setPinPattern(pattern, bundleID: bundleID, slot: slot)
+    }
+
+    func forgetApp(bundleID: String) {
+        tracker.forgetApp(bundleID: bundleID)
+    }
+
+    func setExcluded(_ excluded: Bool, bundleID: String) {
+        if excluded {
+            excludeList.bundleIDs.insert(bundleID)
+        } else {
+            excludeList.bundleIDs.remove(bundleID)
+        }
+        try? excludeList.save(to: excludeURL)
+    }
+
+    /// Entry editing for the Layouts tab.
+    func removeEntry(atIndex index: Int, fromLayoutID layoutID: UUID) {
+        var library = layoutLibraryStore.load()
+        library.removeEntry(atIndex: index, fromLayoutID: layoutID)
+        try? layoutLibraryStore.save(library)
+    }
+
+    func setEntryOptional(_ optional: Bool, atIndex index: Int, inLayoutID layoutID: UUID) {
+        var library = layoutLibraryStore.load()
+        library.setEntryOptional(optional, atIndex: index, inLayoutID: layoutID)
+        try? layoutLibraryStore.save(library)
     }
 
     /// Re-reads the library and registers a hotkey handler per active bundle.
