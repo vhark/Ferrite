@@ -15,7 +15,8 @@ enum SnapshotBuilder {
                   seenBundles.insert(bundleID).inserted else { continue }
             let appHandle = AXAppHandle(pid: app.processIdentifier)
             for window in appHandle.windows {
-                guard let frame = window.frame, frame.width > 1, frame.height > 1
+                guard window.isStandardWindow,
+                      let frame = window.frame, frame.width > 1, frame.height > 1
                 else { continue }
                 let id = window.stableID
                 axRefs.append(ZOrderMatcher.AXRef(id: id, pid: app.processIdentifier,

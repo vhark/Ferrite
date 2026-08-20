@@ -22,8 +22,9 @@ final class AppObserver {
         self.bundleID = bundleID
         self.onActivity = onActivity
         self.appElement = AXUIElementCreateApplication(pid)
-        AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString,
-                                     kCFBooleanTrue)
+        // NOTE: AXManualAccessibility is deliberately NOT set here. Setting it
+        // eagerly makes Finder report zero windows; AXAppHandle enables it
+        // lazily (process-wide) only for apps whose window list comes back empty.
 
         let callback: AXObserverCallback = { _, _, _, refcon in
             guard let refcon else { return }

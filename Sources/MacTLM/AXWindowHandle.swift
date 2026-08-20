@@ -17,6 +17,13 @@ final class AXWindowHandle {
         (copyValue(kAXTitleAttribute) as? String) ?? ""
     }
 
+    /// True only for ordinary document/app windows. Excludes Finder's desktop
+    /// window, tooltips, popovers and other non-standard AX windows that would
+    /// otherwise be captured into layouts and driven around.
+    var isStandardWindow: Bool {
+        (copyValue(kAXSubroleAttribute) as? String) == (kAXStandardWindowSubrole as String)
+    }
+
     var frame: CGRect? {
         guard let positionValue = copyValue(kAXPositionAttribute),
               let sizeValue = copyValue(kAXSizeAttribute),
@@ -59,20 +66,36 @@ final class AXWindowHandle {
 final class AXAppHandle {
     let element: AXUIElement
     let pid: pid_t
+    private var didEnableManualAccessibility = false
 
     init(pid: pid_t) {
         self.pid = pid
         element = AXUIElementCreateApplication(pid)
-        // Electron apps expose windows only after this.
-        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString,
-                                     kCFBooleanTrue)
     }
 
-    var windows: [AXWindowHandle] {
+    var windows: [AXWindowHandle] { windowsResult().windows }
+
+    /// Windows plus the raw AXError, so callers can diagnose empty results.
+    ///
+    /// AXManualAccessibility is applied LAZILY, only when a first query comes
+    /// back empty: Electron apps expose windows only after that opt-in, but
+    /// setting it eagerly makes Finder report zero windows (verified 2026-08-19).
+    func windowsResult() -> (windows: [AXWindowHandle], error: AXError) {
+        let first = copyWindows()
+        if !first.windows.isEmpty || first.error != .success { return first }
+        guard !didEnableManualAccessibility else { return first }
+        didEnableManualAccessibility = true
+        AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString,
+                                     kCFBooleanTrue)
+        return copyWindows()
+    }
+
+    private func copyWindows() -> (windows: [AXWindowHandle], error: AXError) {
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString,
-                                            &value) == .success,
-              let array = value as? [AXUIElement] else { return [] }
-        return array.map(AXWindowHandle.init)
+        let error = AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString,
+                                                 &value)
+        guard error == .success else { return ([], error) }
+        guard let array = value as? [AXUIElement] else { return ([], .noValue) }
+        return (array.map(AXWindowHandle.init), .success)
     }
 }

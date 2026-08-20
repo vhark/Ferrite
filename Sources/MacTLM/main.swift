@@ -18,7 +18,21 @@ if arguments.contains("--list-windows") {
         guard let bundleID = app.bundleIdentifier else { continue }
         guard seen.insert(bundleID).inserted else { continue }
         let windows = driver.windows(ofBundleID: bundleID)
-        guard !windows.isEmpty else { continue }
+        if windows.isEmpty {
+            // Report why: AX error, or windows present but all frame-filtered.
+            let handles = NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleID)
+                .map { AXAppHandle(pid: $0.processIdentifier).windowsResult() }
+            let rawCount = handles.reduce(0) { $0 + $1.windows.count }
+            let errors = handles.map { "\($0.error.rawValue)" }.joined(separator: ",")
+            print("\n\(bundleID)  [0 usable | raw AX windows: \(rawCount), AXError: \(errors)]")
+            for handle in handles {
+                for window in handle.windows {
+                    print("    raw \"\(window.title)\" frame=\(String(describing: window.frame))")
+                }
+            }
+            continue
+        }
         print("\n\(bundleID)")
         for window in windows {
             print("  [\(window.id)] \"\(window.title)\" \(window.frame)")
