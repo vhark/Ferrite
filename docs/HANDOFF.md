@@ -24,13 +24,20 @@ Shipped and verified live: automatic window-position persistence (M1) and worksp
 - `configurations/5836EAC1-…_7680x2160@1.0.json` — per-app window records for the current display setup
 - `exclude.json` — only written once an app is excluded via the menu; defaults otherwise (Illustrator, After Effects, MATLAB)
 
-## After the restart — startup checklist
+## Install layout (as of 2026-08-20, post macOS 26.6.2 update)
 
-1. **The app will NOT auto-start.** Launch at Login was never enabled (verified: no registered login agent). Start it with:
-   ```bash
-   open /Users/vincehark/Code/MacTLM/build/MacTLM.app
-   ```
-   To make it permanent, tick **Launch at Login** in the menu.
+**Daily driver: `/Applications/MacTLM.app`** — installed via `scripts/install.sh` and registered for Launch at Login (`status: enabled`). It starts itself at login and asserts your saved frames, so you no longer depend on macOS Resume.
+
+**Dev builds stay in `build/MacTLM.app`** via `scripts/make-app.sh`. Never register the build copy for login: `make-app.sh` deletes and recreates that bundle, and wiping `build/` would silently break the login item. `scripts/install.sh` re-runs the build, unregisters any build-dir login item, dittos the bundle to `/Applications`, re-registers from there, and relaunches.
+
+Check state any time:
+```bash
+/Applications/MacTLM.app/Contents/MacOS/MacTLM --login-status
+```
+
+## After a restart — startup checklist
+
+1. **It should start on its own.** If the menu-bar icon is missing, check `--login-status` above; `requiresApproval` means macOS wants you to allow MacTLM under System Settings → General → Login Items (the menu item now says "Launch at Login (needs approval)" and offers to open that pane).
 
 2. **Accessibility permission may need re-approval after a macOS update.** Symptom: no menu-bar icon after launching.
    ```bash
