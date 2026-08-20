@@ -158,4 +158,51 @@ final class WindowTrackerTests: XCTestCase {
         XCTAssertTrue(tracker.recordsFor(bundleID: "app").isEmpty,
                       "capture during config drift must be dropped")
     }
+
+    func testSetPinPatternPersistsImmediately() {
+        driver.windowsByBundle["arc"] = [
+            DriverWindow(id: 1, title: "Work", frame: CGRect(x: 0, y: 25, width: 400, height: 900)),
+        ]
+        let tracker = makeTracker(saveDelay: 60) // debounce far in the future
+        tracker.noteActivity(bundleID: "arc")
+        tracker.setPinPattern("Work", bundleID: "arc", slot: 0)
+        // Immediate flush, not waiting on the debounce.
+        XCTAssertEqual(store.load(configKey: "test-config")
+            .apps["arc"]?[0].pinPattern, "Work")
+        XCTAssertEqual(tracker.recordsFor(bundleID: "arc")[0].pinPattern, "Work")
+    }
+
+    func testPinSurvivesTheNextCapture() {
+        driver.windowsByBundle["arc"] = [
+            DriverWindow(id: 1, title: "Work", frame: CGRect(x: 0, y: 25, width: 400, height: 900)),
+        ]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "arc")
+        tracker.setPinPattern("Work", bundleID: "arc", slot: 0)
+        // A later capture must not wipe the pin the user just set.
+        tracker.noteActivity(bundleID: "arc")
+        XCTAssertEqual(tracker.recordsFor(bundleID: "arc")[0].pinPattern, "Work")
+    }
+
+    func testForgetAppClearsMemoryAndDisk() {
+        driver.windowsByBundle["junk"] = [
+            DriverWindow(id: 1, title: "Open", frame: CGRect(x: 0, y: 25, width: 400, height: 300)),
+        ]
+        let tracker = makeTracker(saveDelay: 60)
+        tracker.noteActivity(bundleID: "junk")
+        tracker.forgetApp(bundleID: "junk")
+        XCTAssertTrue(tracker.recordsFor(bundleID: "junk").isEmpty)
+        XCTAssertNil(store.load(configKey: "test-config").apps["junk"])
+    }
+
+    func testRememberedBundleIDsReflectsForget() {
+        driver.windowsByBundle["a"] = [
+            DriverWindow(id: 1, title: "A", frame: CGRect(x: 0, y: 25, width: 400, height: 300)),
+        ]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "a")
+        XCTAssertEqual(tracker.rememberedBundleIDs, ["a"])
+        tracker.forgetApp(bundleID: "a")
+        XCTAssertTrue(tracker.rememberedBundleIDs.isEmpty)
+    }
 }

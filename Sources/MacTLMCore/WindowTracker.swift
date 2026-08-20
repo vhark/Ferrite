@@ -53,6 +53,24 @@ public final class WindowTracker {
         Array(records.apps.keys)
     }
 
+    /// Sets or clears a pin, then flushes. Pin edits come from the UI, so they
+    /// must not wait on the capture debounce (and must not be clobbered by it).
+    public func setPinPattern(_ pattern: String?, bundleID: String, slot: Int) {
+        records.setPinPattern(pattern, bundleID: bundleID, slot: slot)
+        persist()
+    }
+
+    /// Forgets every remembered window for an app, then flushes.
+    public func forgetApp(bundleID: String) {
+        records.forgetApp(bundleID: bundleID)
+        persist()
+    }
+
+    /// Snapshot of everything remembered in this configuration, for the UI.
+    public func allRecords() -> [String: [WindowRecord]] {
+        records.apps
+    }
+
     /// Call when the display configuration changes: swap namespaces.
     public func reloadForCurrentConfiguration() {
         saveDebouncer.cancel()
