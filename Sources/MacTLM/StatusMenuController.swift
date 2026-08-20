@@ -1,5 +1,6 @@
 import AppKit
 import ServiceManagement
+import KeyboardShortcuts
 import MacTLMCore
 
 final class StatusMenuController: NSObject, NSMenuDelegate {
@@ -26,8 +27,27 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menuLayouts.removeAll()
 
         let library = coordinator.layoutLibraryStore.load()
+        let bundles = library.bundles()
         let connectedIDs = Set(ScreenGeometry.allDisplays.map(\.info.id))
         let byDisplay = Dictionary(grouping: library.layouts, by: \.displayID)
+
+        // Workspaces: bundles whose layouts span more than one display.
+        let multiDisplay = bundles.filter(\.spansMultipleDisplays)
+        if !multiDisplay.isEmpty {
+            menu.addItem(sectionHeader("Workspaces (all displays)"))
+            for bundle in multiDisplay {
+                let item = NSMenuItem(title: bundle.name,
+                                      action: #selector(launchBundle(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.indentationLevel = 1
+                item.representedObject = bundle.name as NSString
+                if let shortcut = LayoutShortcuts.shortcut(forBundle: bundle.name) {
+                    item.setShortcut(shortcut)
+                }
+                menu.addItem(item)
+            }
+        }
 
         // Sections per connected display.
         for display in ScreenGeometry.allDisplays {
@@ -87,6 +107,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         return item
     }
 
+    // `LayoutShortcuts.shortcut(forBundle:)` and `NSMenuItem.setShortcut` are
+    // main-actor bound; menu building already happens on the main actor.
+    @MainActor
     private func layoutItem(_ layout: MonitorLayout, indent: Int) -> NSMenuItem {
         let title = layout.stageMode == .clearStage ? "\(layout.name) · clears stage" : layout.name
         let item = NSMenuItem(title: title,
@@ -94,6 +117,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         item.target = self
         item.indentationLevel = indent
         item.representedObject = layout.id as NSUUID
+        if let shortcut = LayoutShortcuts.shortcut(forBundle: layout.name) {
+            item.setShortcut(shortcut)
+        }
         menuLayouts[layout.id] = layout
         return item
     }
@@ -110,6 +136,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         guard let id = sender.representedObject as? UUID,
               let layout = menuLayouts[id] else { return }
         coordinator.applyLayout(layout)
+    }
+
+    @objc private func launchBundle(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        coordinator.applyBundle(named: name)
     }
 
     @objc private func saveArrangement() {

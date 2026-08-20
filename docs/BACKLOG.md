@@ -50,6 +50,7 @@ Test suite: 70 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit layer
 | ISO-8601 store dates | Sub-second precision truncated | Never compare live vs re-loaded records for equality |
 | Login restore ordering | Startup sweep captures Resume-placed windows; arming settles for already-running remembered apps fixes the restore, but Resume still wins the first paint | Verified working; cosmetic |
 | Launching an app does not reopen its documents | Document apps may come back empty (Open dialog) | Out of scope; finding 3 stops mis-placement |
+| One app with windows on two displays in a bundle | A window can be claimed by the wrong display's records | Each display's records are matched against all of that app's windows. Single-display setups are unaffected. Fix needs per-app merged placement with absolute target rects; deferred until there is a two-monitor setup to test against |
 
 ## Linux port (post-M2)
 
