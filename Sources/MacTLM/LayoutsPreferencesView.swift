@@ -2,19 +2,36 @@ import SwiftUI
 import KeyboardShortcuts
 import MacTLMCore
 
-/// One row per saved workspace: hotkey recorder, stage toggle, rename, delete.
+/// One row per saved workspace: hotkey recorder, stage toggle, rename, archive.
+/// Archived workspaces get their own section — greyed out, no hotkey, and the
+/// only place a layout can be deleted for good.
 struct LayoutsPreferencesView: View {
     @ObservedObject var model: LayoutsPreferencesModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if model.bundles.isEmpty {
+            if model.bundles.isEmpty && model.archivedBundles.isEmpty {
                 Text("No layouts saved yet.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(model.bundles, id: \.name) { bundle in
-                    LayoutRow(bundle: bundle, model: model)
+                List {
+                    Section("Layouts") {
+                        if model.bundles.isEmpty {
+                            Text("No active layouts.").foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.bundles, id: \.name) { bundle in
+                                LayoutRow(bundle: bundle, model: model)
+                            }
+                        }
+                    }
+                    if !model.archivedBundles.isEmpty {
+                        Section("Archived") {
+                            ForEach(model.archivedBundles, id: \.name) { bundle in
+                                ArchivedLayoutRow(bundle: bundle, model: model)
+                            }
+                        }
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -29,6 +46,24 @@ struct LayoutsPreferencesView: View {
     }
 }
 
+/// Shared name + "N windows · displays" caption.
+private struct BundleSummary: View {
+    let bundle: LayoutBundle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(bundle.name).fontWeight(.medium)
+            Text(caption).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var caption: String {
+        let displays = bundle.layouts.map(\.displayName).joined(separator: ", ")
+        let windows = bundle.layouts.reduce(0) { $0 + $1.entries.count }
+        return "\(windows) windows · \(displays)"
+    }
+}
+
 private struct LayoutRow: View {
     let bundle: LayoutBundle
     @ObservedObject var model: LayoutsPreferencesModel
@@ -37,15 +72,14 @@ private struct LayoutRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                if isRenaming {
+            if isRenaming {
+                VStack(alignment: .leading, spacing: 2) {
                     TextField("Name", text: $draftName)
                         .onSubmit(commitRename)
                         .frame(width: 180)
-                } else {
-                    Text(bundle.name).fontWeight(.medium)
                 }
-                Text(displaySummary).font(.caption).foregroundStyle(.secondary)
+            } else {
+                BundleSummary(bundle: bundle)
             }
             Spacer()
             Toggle("Hide others", isOn: Binding(
@@ -59,15 +93,10 @@ private struct LayoutRow: View {
                     isRenaming = true
                 }
             }
-            Button("Delete") { model.delete(bundleName: bundle.name) }
+            // Archiving is reversible, so it needs no confirmation.
+            Button("Archive") { model.archive(bundleName: bundle.name) }
         }
         .padding(.vertical, 4)
-    }
-
-    private var displaySummary: String {
-        let displays = bundle.layouts.map(\.displayName).joined(separator: ", ")
-        let windows = bundle.layouts.reduce(0) { $0 + $1.entries.count }
-        return "\(windows) windows · \(displays)"
     }
 
     private func commitRename() {
@@ -78,9 +107,38 @@ private struct LayoutRow: View {
     }
 }
 
+private struct ArchivedLayoutRow: View {
+    let bundle: LayoutBundle
+    @ObservedObject var model: LayoutsPreferencesModel
+    @State private var isConfirmingDelete = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            BundleSummary(bundle: bundle)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Restore") { model.restore(bundleName: bundle.name) }
+            Button("Delete Permanently") { isConfirmingDelete = true }
+        }
+        .padding(.vertical, 4)
+        // Cancel is the default, safe choice; the destructive button is opt-in.
+        .confirmationDialog("Delete \"\(bundle.name)\" permanently?",
+                            isPresented: $isConfirmingDelete) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete Permanently", role: .destructive) {
+                model.deletePermanently(bundleName: bundle.name)
+            }
+        } message: {
+            Text("This removes the saved window positions for every display in "
+                 + "this workspace. This cannot be undone.")
+        }
+    }
+}
+
 /// Bridges the AppKit coordinator to SwiftUI.
 final class LayoutsPreferencesModel: ObservableObject {
     @Published var bundles: [LayoutBundle] = []
+    @Published var archivedBundles: [LayoutBundle] = []
     private let coordinator: PersistenceCoordinator
 
     init(coordinator: PersistenceCoordinator) {
@@ -88,14 +146,27 @@ final class LayoutsPreferencesModel: ObservableObject {
         reload()
     }
 
-    func reload() { bundles = coordinator.loadBundles() }
+    func reload() {
+        bundles = coordinator.loadBundles()
+        archivedBundles = coordinator.loadArchivedBundles()
+    }
 
     func rename(from oldName: String, to newName: String) {
         coordinator.renameBundle(from: oldName, to: newName)
         reload()
     }
 
-    func delete(bundleName: String) {
+    func archive(bundleName: String) {
+        coordinator.archiveBundle(named: bundleName)
+        reload()
+    }
+
+    func restore(bundleName: String) {
+        coordinator.restoreBundle(named: bundleName)
+        reload()
+    }
+
+    func deletePermanently(bundleName: String) {
         coordinator.deleteBundle(named: bundleName)
         reload()
     }

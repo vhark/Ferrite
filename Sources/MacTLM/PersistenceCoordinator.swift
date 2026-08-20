@@ -160,6 +160,23 @@ final class PersistenceCoordinator {
         refreshShortcuts()
     }
 
+    /// Reversible: hides the workspace from the menu and stops registering its
+    /// hotkey. The recorded shortcut stays in UserDefaults for the restore.
+    func archiveBundle(named name: String) {
+        var library = layoutLibraryStore.load()
+        library.archiveBundle(named: name)
+        try? layoutLibraryStore.save(library)
+        refreshShortcuts()
+    }
+
+    func restoreBundle(named name: String) {
+        var library = layoutLibraryStore.load()
+        library.restoreBundle(named: name)
+        try? layoutLibraryStore.save(library)
+        refreshShortcuts()
+    }
+
+    /// Permanent delete — only reachable from the archive in the UI.
     func deleteBundle(named name: String) {
         var library = layoutLibraryStore.load()
         library.deleteBundle(named: name)
@@ -175,13 +192,18 @@ final class PersistenceCoordinator {
     }
 
     func loadBundles() -> [LayoutBundle] {
-        layoutLibraryStore.load().bundles()
+        layoutLibraryStore.load().activeBundles()
     }
 
-    /// Re-reads the library and registers a hotkey handler per bundle.
-    /// Call after any library mutation so new bundles become triggerable.
+    func loadArchivedBundles() -> [LayoutBundle] {
+        layoutLibraryStore.load().archivedBundles()
+    }
+
+    /// Re-reads the library and registers a hotkey handler per active bundle.
+    /// Call after any library mutation so new bundles become triggerable and
+    /// archived ones stop firing.
     func refreshShortcuts() {
-        let names = layoutLibraryStore.load().bundles().map(\.name)
+        let names = layoutLibraryStore.load().activeBundles().map(\.name)
         LayoutShortcuts.register(bundleNames: names) { [weak self] bundleName in
             self?.applyBundle(named: bundleName)
         }

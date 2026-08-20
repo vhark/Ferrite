@@ -45,17 +45,39 @@ public struct MonitorLayout: Codable, Equatable, Identifiable {
 /// Every saved layout. Bundles (multi-display linking) arrive in M2b.
 public struct LayoutLibrary: Codable, Equatable {
     public var layouts: [MonitorLayout]
+    /// Bundle names hidden from the menu and from hotkey registration.
+    /// Archiving is reversible; only the archive can permanently delete.
+    public var archivedBundleNames: Set<String>
 
-    public init(layouts: [MonitorLayout] = []) {
+    public init(layouts: [MonitorLayout] = [],
+                archivedBundleNames: Set<String> = []) {
         self.layouts = layouts
+        self.archivedBundleNames = archivedBundleNames
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case layouts, archivedBundleNames
+    }
+
+    /// Absent-tolerant: files written before archiving existed have no
+    /// `archivedBundleNames` key and MUST still decode (a failure here would
+    /// make the fail-soft store load an empty library and lose real layouts).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        layouts = try container.decodeIfPresent([MonitorLayout].self,
+                                                forKey: .layouts) ?? []
+        archivedBundleNames = try container.decodeIfPresent(
+            Set<String>.self, forKey: .archivedBundleNames) ?? []
     }
 
     /// Replaces layouts sharing a (name, displayID) key with the incoming ones,
     /// appending the rest. Re-snapshotting a name edits it in place (PRD §3.2).
+    /// Saving over an archived name reactivates it.
     public mutating func upsert(_ incoming: [MonitorLayout]) {
         let keys = Set(incoming.map { "\($0.name)\u{0}\($0.displayID)" })
         layouts.removeAll { keys.contains("\($0.name)\u{0}\($0.displayID)") }
         layouts.append(contentsOf: incoming)
+        archivedBundleNames.subtract(incoming.map(\.name))
     }
 }
 
@@ -89,8 +111,29 @@ public extension LayoutLibrary {
 }
 
 public extension LayoutLibrary {
-    /// Renames every layout in a bundle. If the new name collides on a display,
-    /// the renamed layout wins (same rule as `upsert`).
+    /// Active (non-archived) bundles, and archived ones, both name-sorted.
+    func activeBundles() -> [LayoutBundle] {
+        bundles().filter { !archivedBundleNames.contains($0.name) }
+    }
+
+    func archivedBundles() -> [LayoutBundle] {
+        bundles().filter { archivedBundleNames.contains($0.name) }
+    }
+
+    mutating func archiveBundle(named name: String) {
+        guard layouts.contains(where: { $0.name == name }) else { return }
+        archivedBundleNames.insert(name)
+    }
+
+    mutating func restoreBundle(named name: String) {
+        archivedBundleNames.remove(name)
+    }
+}
+
+public extension LayoutLibrary {
+    /// Renames every layout in a bundle, carrying the archived flag across.
+    /// If the new name collides on a display, the renamed layout wins (same
+    /// rule as `upsert`).
     mutating func renameBundle(from oldName: String, to newName: String) {
         guard oldName != newName else { return }
         let renamed = layouts.filter { $0.name == oldName }.map { layout -> MonitorLayout in
@@ -99,12 +142,16 @@ public extension LayoutLibrary {
             return copy
         }
         guard !renamed.isEmpty else { return }
+        let wasArchived = archivedBundleNames.remove(oldName) != nil
         layouts.removeAll { $0.name == oldName }
-        upsert(renamed)
+        upsert(renamed)   // clears newName from the archive
+        if wasArchived { archivedBundleNames.insert(newName) }
     }
 
+    /// Permanent delete: drops the layouts and any archive entry for the name.
     mutating func deleteBundle(named name: String) {
         layouts.removeAll { $0.name == name }
+        archivedBundleNames.remove(name)
     }
 
     mutating func setStageMode(_ mode: StageMode, forBundleNamed name: String) {

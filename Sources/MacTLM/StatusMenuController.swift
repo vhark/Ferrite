@@ -27,9 +27,14 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menuLayouts.removeAll()
 
         let library = coordinator.layoutLibraryStore.load()
-        let bundles = library.bundles()
+        let bundles = library.activeBundles()
+        // Archived workspaces vanish from the menu entirely, per-display rows
+        // included, but their layouts stay on disk.
+        let activeLayouts = library.layouts.filter {
+            !library.archivedBundleNames.contains($0.name)
+        }
         let connectedIDs = Set(ScreenGeometry.allDisplays.map(\.info.id))
-        let byDisplay = Dictionary(grouping: library.layouts, by: \.displayID)
+        let byDisplay = Dictionary(grouping: activeLayouts, by: \.displayID)
 
         // Workspaces: bundles whose layouts span more than one display.
         let multiDisplay = bundles.filter(\.spansMultipleDisplays)
@@ -59,7 +64,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
 
         // Inactive monitor layouts (collapsed submenu), adaptive launch.
-        let inactive = library.layouts.filter { !connectedIDs.contains($0.displayID) }
+        let inactive = activeLayouts.filter { !connectedIDs.contains($0.displayID) }
         if !inactive.isEmpty {
             let parent = NSMenuItem(title: "Inactive Monitor Layouts",
                                     action: nil, keyEquivalent: "")
