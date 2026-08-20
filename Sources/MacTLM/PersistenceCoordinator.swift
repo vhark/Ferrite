@@ -112,6 +112,8 @@ final class PersistenceCoordinator {
             guard let self, !self.isPaused else { return }
             self.restoreAll()
         }
+
+        refreshShortcuts()
     }
 
     /// Restore every remembered app that is currently running.
@@ -136,6 +138,7 @@ final class PersistenceCoordinator {
         var library = layoutLibraryStore.load()
         library.upsert(layouts)
         try? layoutLibraryStore.save(library)
+        refreshShortcuts()
     }
 
     func applyLayout(_ layout: MonitorLayout) {
@@ -153,6 +156,16 @@ final class PersistenceCoordinator {
         var library = layoutLibraryStore.load()
         library.layouts.removeAll { $0.id == id }
         try? layoutLibraryStore.save(library)
+        refreshShortcuts()
+    }
+
+    /// Re-reads the library and registers a hotkey handler per bundle.
+    /// Call after any library mutation so new bundles become triggerable.
+    func refreshShortcuts() {
+        let names = layoutLibraryStore.load().bundles().map(\.name)
+        LayoutShortcuts.register(bundleNames: names) { [weak self] bundleName in
+            self?.applyBundle(named: bundleName)
+        }
     }
 
     /// Arms (or re-arms) a settle for bundleID. While armed, activity events
