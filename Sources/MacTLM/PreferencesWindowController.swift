@@ -17,15 +17,34 @@ final class PreferencesWindowController {
             window.makeKeyAndOrderFront(nil)
             return
         }
-        let model = LayoutsPreferencesModel(coordinator: coordinator)
-        let hosting = NSHostingController(rootView: LayoutsPreferencesView(model: model))
+        let layoutsModel = LayoutsPreferencesModel(coordinator: coordinator)
+        let appsModel = AppsPreferencesModel(coordinator: coordinator)
+        let hosting = NSHostingController(
+            rootView: PreferencesRootView(layoutsModel: layoutsModel, appsModel: appsModel))
         let window = NSWindow(contentViewController: hosting)
-        window.title = "MacTLM Layouts"
+        window.title = "MacTLM Preferences"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.center()
         self.window = window
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// Layouts and Apps share one window, macOS System Settings style.
+private struct PreferencesRootView: View {
+    @ObservedObject var layoutsModel: LayoutsPreferencesModel
+    @ObservedObject var appsModel: AppsPreferencesModel
+
+    var body: some View {
+        TabView {
+            LayoutsPreferencesView(model: layoutsModel)
+                .tabItem { Text("Layouts") }
+            AppsPreferencesView(model: appsModel)
+                .tabItem { Text("Apps") }
+        }
+        .padding(12)
+        .frame(minWidth: 620, minHeight: 420)
     }
 }

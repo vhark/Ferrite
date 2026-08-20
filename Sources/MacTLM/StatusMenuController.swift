@@ -97,7 +97,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let login = actionItem(loginTitle, #selector(toggleLoginItem))
         login.state = loginStatus == .enabled ? .on : .off
         menu.addItem(login)
-        menu.addItem(actionItem("Layouts…", #selector(showPreferences)))
+        let preferences = actionItem("Preferences…", #selector(showPreferences))
+        preferences.keyEquivalent = ","
+        preferences.keyEquivalentModifierMask = [.command]
+        menu.addItem(preferences)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit MacTLM",
                                 action: #selector(NSApplication.terminate(_:)),

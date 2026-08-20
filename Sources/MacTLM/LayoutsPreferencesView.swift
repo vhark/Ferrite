@@ -41,7 +41,7 @@ struct LayoutsPreferencesView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(16)
-        .frame(minWidth: 520, minHeight: 320)
+        .frame(minWidth: 600, minHeight: 340)
         .onAppear { model.reload() }
     }
 }
@@ -71,32 +71,46 @@ private struct LayoutRow: View {
     @State private var draftName = ""
 
     var body: some View {
-        HStack(spacing: 12) {
-            if isRenaming {
-                VStack(alignment: .leading, spacing: 2) {
-                    TextField("Name", text: $draftName)
-                        .onSubmit(commitRename)
-                        .frame(width: 180)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                if isRenaming {
+                    VStack(alignment: .leading, spacing: 2) {
+                        TextField("Name", text: $draftName)
+                            .onSubmit(commitRename)
+                            .frame(width: 180)
+                    }
+                } else {
+                    BundleSummary(bundle: bundle)
                 }
-            } else {
-                BundleSummary(bundle: bundle)
+                Spacer()
+                Toggle("Hide others", isOn: Binding(
+                    get: { bundle.layouts.first?.stageMode == .clearStage },
+                    set: { model.setClearStage($0, for: bundle.name) }))
+                    .toggleStyle(.checkbox)
+                KeyboardShortcuts.Recorder("", name: LayoutShortcuts.name(forBundle: bundle.name))
+                Button(isRenaming ? "Save" : "Rename") {
+                    if isRenaming { commitRename() } else {
+                        draftName = bundle.name
+                        isRenaming = true
+                    }
+                }
+                // Archiving is reversible, so it needs no confirmation.
+                Button("Archive") { model.archive(bundleName: bundle.name) }
             }
-            Spacer()
-            Toggle("Hide others", isOn: Binding(
-                get: { bundle.layouts.first?.stageMode == .clearStage },
-                set: { model.setClearStage($0, for: bundle.name) }))
-                .toggleStyle(.checkbox)
-            KeyboardShortcuts.Recorder("", name: LayoutShortcuts.name(forBundle: bundle.name))
-            Button(isRenaming ? "Save" : "Rename") {
-                if isRenaming { commitRename() } else {
-                    draftName = bundle.name
-                    isRenaming = true
+            DisclosureGroup("\(windowCount) windows") {
+                ForEach(bundle.layouts) { layout in
+                    LayoutEntriesGroup(layout: layout,
+                                       showsDisplayName: bundle.layouts.count > 1,
+                                       model: model)
                 }
             }
-            // Archiving is reversible, so it needs no confirmation.
-            Button("Archive") { model.archive(bundleName: bundle.name) }
+            .font(.callout)
         }
         .padding(.vertical, 4)
+    }
+
+    private var windowCount: Int {
+        bundle.layouts.reduce(0) { $0 + $1.entries.count }
     }
 
     private func commitRename() {
@@ -104,6 +118,65 @@ private struct LayoutRow: View {
         isRenaming = false
         guard !trimmed.isEmpty, trimmed != bundle.name else { return }
         model.rename(from: bundle.name, to: trimmed)
+    }
+}
+
+/// The windows saved for one display, each removable and flaggable optional.
+private struct LayoutEntriesGroup: View {
+    let layout: MonitorLayout
+    let showsDisplayName: Bool
+    @ObservedObject var model: LayoutsPreferencesModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if showsDisplayName {
+                Text(layout.displayName).font(.caption).foregroundStyle(.secondary)
+            }
+            if layout.entries.isEmpty {
+                // An empty layout is allowed — re-snapshotting refills it.
+                Text("No windows left in this layout.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(layout.entries.enumerated()), id: \.offset) { index, entry in
+                    LayoutEntryRow(entry: entry, index: index,
+                                   layoutID: layout.id, model: model)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct LayoutEntryRow: View {
+    let entry: LayoutEntry
+    let index: Int
+    let layoutID: UUID
+    @ObservedObject var model: LayoutsPreferencesModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("z\(entry.zIndex)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 28, alignment: .leading)
+            Text(PersistenceCoordinator.localizedAppName(forBundleID: entry.bundleID))
+                .lineLimit(1)
+                .frame(width: 140, alignment: .leading)
+            Text(entry.title.isEmpty ? "(untitled)" : entry.title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("Optional", isOn: Binding(
+                get: { entry.optional },
+                set: { model.setEntryOptional($0, atIndex: index, inLayoutID: layoutID) }))
+                .toggleStyle(.checkbox)
+            // No confirmation: a removed entry returns with the next snapshot.
+            Button("Remove") { model.removeEntry(atIndex: index, fromLayoutID: layoutID) }
+        }
+        .padding(.vertical, 1)
     }
 }
 
@@ -174,6 +247,16 @@ final class LayoutsPreferencesModel: ObservableObject {
     func setClearStage(_ on: Bool, for bundleName: String) {
         coordinator.setStageMode(on ? .clearStage : .leaveOthers,
                                  forBundleNamed: bundleName)
+        reload()
+    }
+
+    func removeEntry(atIndex index: Int, fromLayoutID layoutID: UUID) {
+        coordinator.removeEntry(atIndex: index, fromLayoutID: layoutID)
+        reload()
+    }
+
+    func setEntryOptional(_ optional: Bool, atIndex index: Int, inLayoutID layoutID: UUID) {
+        coordinator.setEntryOptional(optional, atIndex: index, inLayoutID: layoutID)
         reload()
     }
 }

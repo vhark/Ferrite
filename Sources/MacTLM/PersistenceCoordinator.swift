@@ -225,7 +225,7 @@ final class PersistenceCoordinator {
 
     /// Best-effort human name; falls back to the bundle ID for apps that are
     /// not installed any more (stale records are exactly what this tab cleans).
-    private static func localizedAppName(forBundleID bundleID: String) -> String {
+    static func localizedAppName(forBundleID bundleID: String) -> String {
         guard let url = NSWorkspace.shared
             .urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
         return FileManager.default.displayName(atPath: url.path)
