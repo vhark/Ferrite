@@ -33,6 +33,11 @@ public final class LayoutLibraryStore {
         return library
     }
 
+    /// Side-effect form of `loadPurgingLegacyTitles()` for startup scrubbing.
+    public func purgeLegacyTitles() {
+        _ = loadPurgingLegacyTitles()
+    }
+
     public func save(_ library: LayoutLibrary) throws {
         try encoder.encode(library).write(to: url, options: .atomic)
     }

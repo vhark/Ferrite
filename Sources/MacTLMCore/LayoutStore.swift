@@ -35,6 +35,16 @@ public final class LayoutStore {
         return records
     }
 
+    /// Scrubs legacy plaintext `title` keys from EVERY namespace on disk, not
+    /// just the one currently loaded. Titles were never meant to persist, and
+    /// a namespace for a display arrangement you have not reattached yet would
+    /// otherwise keep them indefinitely.
+    public func purgeLegacyTitlesInAllNamespaces() {
+        for key in configKeys() {
+            _ = loadPurgingLegacyTitles(configKey: key)
+        }
+    }
+
     /// Every display-configuration namespace with a file on disk. Pin edits
     /// reach across namespaces, so the tracker needs to know which exist.
     public func configKeys() -> [String] {

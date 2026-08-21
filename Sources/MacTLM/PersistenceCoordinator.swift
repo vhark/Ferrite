@@ -49,6 +49,11 @@ final class PersistenceCoordinator {
         excludeBox = ExcludeListBox(ExcludeList.load(from: excludeURL))
         layoutLibraryStore = LayoutLibraryStore(
             url: supportDir.appendingPathComponent("layouts.json"))
+        // Legacy files (written before hashed identities) still carry plaintext
+        // titles. Scrub every namespace once per launch, not just the one the
+        // tracker loads: a raw-text check per file, rewriting only dirty ones.
+        store.purgeLegacyTitlesInAllNamespaces()
+        layoutLibraryStore.purgeLegacyTitles()
         tracker = WindowTracker(
             driver: driver, store: store,
             configKey: { ScreenGeometry.currentConfiguration.key },
