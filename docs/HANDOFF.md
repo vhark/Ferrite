@@ -22,7 +22,7 @@ Shipped and verified live: automatic window-position persistence (M1) and worksp
   - `SmokeScene` — 10 entries, `leaveOthers` (test scaffold, delete whenever)
   - `StageTest` — 10 entries, `clearStage` (test scaffold, delete whenever)
 - `configurations/5836EAC1-…_7680x2160@1.0.json` — per-app window records for the current display setup
-- `exclude.json` — only written once an app is excluded via the menu; defaults otherwise (Illustrator, After Effects, MATLAB)
+- `exclude.json` — only written once an app is excluded via the menu; defaults otherwise (After Effects, MATLAB — Illustrator was dropped 2026-08-21 after `--probe-frame` showed it accepts frame changes)
 
 ## Install layout (as of 2026-08-20, post macOS 26.6.2 update)
 

@@ -2,8 +2,15 @@ import XCTest
 @testable import MacTLMCore
 
 final class ExcludeListTests: XCTestCase {
-    func testDefaultsExcludeKnownHostileApps() {
-        XCTAssertTrue(ExcludeList.defaults.isExcluded("com.adobe.illustrator"))
+    // Renamed from testDefaultsExcludeKnownHostileApps: the defaults no longer
+    // encode Rectangle's inherited list. `--probe-frame com.adobe.illustrator`
+    // (2026-08-21) requested (40, 50, 5841, 2130) and read back exactly that —
+    // Illustrator ACCEPTS AX frame changes, so it is managed like any other app.
+    // After Effects and MATLAB were not running to probe, so they stay excluded.
+    func testDefaultsExcludeOnlyUnverifiedHostileApps() {
+        XCTAssertTrue(ExcludeList.defaults.isExcluded("com.adobe.AfterEffects"))
+        XCTAssertTrue(ExcludeList.defaults.isExcluded("com.mathworks.matlab"))
+        XCTAssertFalse(ExcludeList.defaults.isExcluded("com.adobe.illustrator"))
         XCTAssertFalse(ExcludeList.defaults.isExcluded("com.apple.TextEdit"))
     }
 

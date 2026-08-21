@@ -36,7 +36,7 @@ Personal tool first — the author's daily workflow is the spec — published as
 
 ### 3.1 Phase 1 — Position persistence (M1)
 
-- **Automatic for all apps**, with a user-editable exclude list. Ships with a default exclude list seeded from Rectangle's known-hostile set (apps that fight external frame changes).
+- **Automatic for all apps**, with a user-editable exclude list. The defaults are **evidence-based**: an app is excluded only once it has been observed to fight external frame changes. The seed came from Rectangle's known-hostile set, but `--probe-frame <bundleID>` now settles it per app — Illustrator ACCEPTED a frame change on 2026-08-21 and was removed from the defaults, so it is managed like any other app; After Effects and MATLAB remain excluded until they can be probed.
 - **Reapply triggers:** app launch, user login, and display-configuration change. Manual window moves are respected until the next reapply trigger; persistence is never continuously enforced (that behavior belongs to magnet groups, and only within a group).
 - **Multi-window apps:** N remembered windows → N restored frames. Matching is heuristic (window count, window-identity hash, creation order). Optional **pin rules** map a title pattern to a specific remembered slot (e.g. an Arc profile name) when identity matters. Pin patterns are user-authored and matched against *live* titles at match time, so they work without any title being stored.
 - Frames are captured on window move/resize (debounced ~2 s) and on app quit.
@@ -111,7 +111,7 @@ The Layout Core imports no AppKit. The Linux port (post-M4) reuses schema, solve
 ### 6.4 Known platform limits (accepted)
 
 - AX sees only the current Space; cross-Space windows are invisible without private APIs. Out of scope by design.
-- Some apps (notably Adobe's) are AX-hostile; they live on the exclude list. Illustrator restoring its own fullscreen window is acceptable — templates simply skip asserting excluded apps beyond launching them.
+- Some apps are genuinely AX-hostile and belong on the exclude list, but that verdict must be measured with `--probe-frame`, not assumed by vendor. Illustrator was probed on 2026-08-21 and honors frame changes, so it is managed; its own fullscreen restore is simply overridden on the next reapply.
 - macOS 15+ native tiling exposes no third-party API; irrelevant to this design.
 
 ## 7. Data model & storage
@@ -148,14 +148,14 @@ Failure posture: no Accessibility permission → onboarding only; launch timeout
 
 | Window | Frame (fractions of visible area) | Notes |
 |---|---|---|
-| Adobe Illustrator | fullscreen | bottom of stack; excluded app — launched, not placed |
+| Adobe Illustrator | fullscreen | bottom of stack; managed like any other app (probed 2026-08-21: accepts frame changes) |
 | Arc #1 | w .25 × h .90, portrait | pair sits slightly **right** of center |
 | Arc #2 | w .25 × h .90, portrait | right member of pair |
 | Paseo | w .25 × h .60 | overlays Arc #2, **vertically centered** |
 | Nextcloud Talk | w .16 × h .70 | far right |
 | Finder | w .16 × h .60 | floating, **left side** |
 
-**M2 acceptance:** from a clean login, one hotkey reproduces this table (Illustrator via launch-only), stacking order included.
+**M2 acceptance:** from a clean login, one hotkey reproduces this table, stacking order included. Originally Illustrator was launch-only because it was assumed AX-hostile; since the 2026-08-21 `--probe-frame` result it is launched *and* placed.
 
 ## 10. Milestones & verification
 

@@ -42,12 +42,14 @@ final class WindowTrackerTests: XCTestCase {
     }
 
     func testExcludedAppIsIgnored() {
-        driver.windowsByBundle["com.adobe.illustrator"] = [
-            DriverWindow(id: 1, title: "Art", frame: CGRect(x: 0, y: 25, width: 800, height: 600)),
+        // After Effects, not Illustrator: Illustrator left `ExcludeList.defaults`
+        // on 2026-08-21 once `--probe-frame` showed it accepts AX frame changes.
+        driver.windowsByBundle["com.adobe.AfterEffects"] = [
+            DriverWindow(id: 1, title: "Comp", frame: CGRect(x: 0, y: 25, width: 800, height: 600)),
         ]
         let tracker = makeTracker()
-        tracker.noteActivity(bundleID: "com.adobe.illustrator")
-        XCTAssertTrue(tracker.recordsFor(bundleID: "com.adobe.illustrator").isEmpty)
+        tracker.noteActivity(bundleID: "com.adobe.AfterEffects")
+        XCTAssertTrue(tracker.recordsFor(bundleID: "com.adobe.AfterEffects").isEmpty)
     }
 
     func testEmptySnapshotKeepsLastKnownRecords() {

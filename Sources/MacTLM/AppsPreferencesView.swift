@@ -46,7 +46,7 @@ private struct AppRecordSection: View {
                 get: { app.isExcluded },
                 set: { model.setExcluded($0, bundleID: app.bundleID) }))
                 .toggleStyle(.checkbox)
-            // Explains why apps like Illustrator start out excluded.
+            // Explains why apps like After Effects start out excluded.
             if ExcludeList.defaults.isExcluded(app.bundleID) {
                 Text("Excluded by default: this app fights external window moves.")
                     .font(.caption)

@@ -1,10 +1,18 @@
 import Foundation
 
-/// Apps persistence never touches. Defaults seeded from Rectangle's
-/// known-hostile set (apps that fight external frame changes).
+/// Apps persistence never touches.
+///
+/// The defaults seed the list with apps that fight external frame changes, but
+/// membership is meant to be *measured*, not inherited. The seed originally came
+/// from Rectangle's known-hostile set; `--probe-frame com.adobe.illustrator`
+/// (2026-08-21) nudged a real Illustrator window, read the frame back and got
+/// the requested rect — it ACCEPTS frame changes, so Illustrator is now managed
+/// like any other app. After Effects and MATLAB stay until someone can run the
+/// same probe against them.
+///
+/// Any app can be re-excluded (or un-excluded) in Preferences > Apps.
 public struct ExcludeList: Codable, Equatable {
     public static let defaults = ExcludeList(bundleIDs: [
-        "com.adobe.illustrator",
         "com.adobe.AfterEffects",
         "com.mathworks.matlab",
     ])

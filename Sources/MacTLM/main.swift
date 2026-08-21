@@ -30,6 +30,37 @@ if arguments.contains("--login-status") || arguments.contains("--login-register"
     exit(0)
 }
 
+if let flagIndex = arguments.firstIndex(of: "--probe-frame") {
+    guard AXPermission.isGranted else {
+        print("Accessibility permission not granted.")
+        exit(1)
+    }
+    guard flagIndex + 1 < arguments.count else {
+        print("usage: MacTLM --probe-frame <bundleID>")
+        exit(2)
+    }
+    // Does this app actually honour AX frame changes? Nudge, read back, restore.
+    let bundleID = arguments[flagIndex + 1]
+    let driver = MacWindowDriver()
+    let windows = driver.windows(ofBundleID: bundleID)
+    guard let window = windows.first else {
+        print("\(bundleID): no eligible windows")
+        exit(3)
+    }
+    let original = window.frame
+    let nudged = original.offsetBy(dx: 40, dy: 20)
+    print("\(bundleID)")
+    print("  original: \(original)")
+    let achieved = driver.setFrame(nudged, of: window)
+    print("  requested: \(nudged)")
+    print("  achieved:  \(achieved)")
+    let moved = abs(achieved.minX - original.minX) > 1 || abs(achieved.minY - original.minY) > 1
+    print("  verdict:   \(moved ? "ACCEPTS frame changes" : "REFUSES frame changes")")
+    _ = driver.setFrame(original, of: window)
+    print("  restored to original")
+    exit(0)
+}
+
 if let flagIndex = arguments.firstIndex(of: "--apply-bundle") {
     guard AXPermission.isGranted else {
         print("Accessibility permission not granted.")
