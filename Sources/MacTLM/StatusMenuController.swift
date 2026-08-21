@@ -26,6 +26,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         menuLayouts.removeAll()
 
+        // PRD §4: the reflow row sits at the top, above anything user-created.
+        menu.addItem(sectionHeader("Reflow this display"))
+        menu.addItem(presetRow())
+        menu.addItem(.separator())
+
         // One row per workspace. Archived bundles are already excluded, so
         // their layouts never surface here even though they stay on disk.
         let connected = Set(ScreenGeometry.allDisplays.map(\.info.id))
@@ -94,6 +99,49 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         return item
     }
 
+    /// Presets in menu order: weighted treemaps first, then the even splits.
+    private static let reflowPresets: [(preset: GroupLayoutSolver.Preset,
+                                       title: String)] = [
+        (.treemap(bias: .center), "Treemap — heaviest in the centre"),
+        (.treemap(bias: .left), "Treemap — heaviest on the left"),
+        (.treemap(bias: .right), "Treemap — heaviest on the right"),
+        (.symmetric, "Symmetric — equal areas"),
+        (.columns, "Columns"),
+        (.rows, "Rows"),
+        (.grid, "Grid"),
+        (.mainSide, "Main + side"),
+    ]
+
+    /// One row of glyph buttons. A menu item's view is never auto-sized, so the
+    /// stack gets an explicit frame from its own fitting size.
+    private func presetRow() -> NSMenuItem {
+        let buttons = Self.reflowPresets.indices.map { index -> NSButton in
+            let entry = Self.reflowPresets[index]
+            let button = NSButton(image: PresetGlyph.image(for: entry.preset),
+                                  target: self, action: #selector(reflowPreset(_:)))
+            button.tag = index
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleNone
+            button.toolTip = entry.title
+            button.setAccessibilityLabel(entry.title)
+            button.widthAnchor.constraint(
+                equalToConstant: PresetGlyph.size.width + 4).isActive = true
+            button.heightAnchor.constraint(
+                equalToConstant: PresetGlyph.size.height + 4).isActive = true
+            return button
+        }
+        let row = NSStackView(views: buttons)
+        row.orientation = .horizontal
+        row.spacing = 2
+        // Left inset lines the glyphs up with the indented rows below.
+        row.edgeInsets = NSEdgeInsets(top: 2, left: 16, bottom: 4, right: 12)
+        row.frame = NSRect(origin: .zero, size: row.fittingSize)
+        let item = NSMenuItem()
+        item.view = row
+        return item
+    }
+
     // `LayoutShortcuts.shortcut(forBundle:)` and `NSMenuItem.setShortcut` are
     // main-actor bound; menu building already happens on the main actor.
     @MainActor
@@ -144,6 +192,13 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     // MARK: - Actions
+
+    @objc private func reflowPreset(_ sender: NSButton) {
+        guard Self.reflowPresets.indices.contains(sender.tag) else { return }
+        coordinator.reflowDisplay(Self.reflowPresets[sender.tag].preset)
+        // A button inside a menu item's view does not dismiss the menu itself.
+        statusItem.menu?.cancelTracking()
+    }
 
     @objc private func launchSingleLayout(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID,
