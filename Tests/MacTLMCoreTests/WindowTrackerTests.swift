@@ -143,7 +143,7 @@ final class WindowTrackerTests: XCTestCase {
         XCTAssertTrue(tracker.recordsFor(bundleID: "app").isEmpty)
     }
 
-    func testActivityDuringConfigDriftIsDropped() {
+    func testActivityDuringConfigDriftMigratesInsteadOfDropping() {
         var key = "cfg-A"
         let tracker = WindowTracker(driver: driver, store: store,
                                     configKey: { key },
@@ -153,10 +153,15 @@ final class WindowTrackerTests: XCTestCase {
         driver.windowsByBundle["app"] = [
             DriverWindow(id: 1, title: "W", frame: CGRect(x: 0, y: 25, width: 800, height: 600)),
         ]
+        var drifts: [(String, String)] = []
+        tracker.onConfigurationDrift = { drifts.append(($0, $1)) }
         key = "cfg-B" // display changed; reload hasn't run yet
         tracker.noteActivity(bundleID: "app")
-        XCTAssertTrue(tracker.recordsFor(bundleID: "app").isEmpty,
-                      "capture during config drift must be dropped")
+        XCTAssertEqual(tracker.recordsFor(bundleID: "app").count, 1,
+                       "a capture during config drift must migrate, not vanish")
+        XCTAssertEqual(drifts.count, 1, "the repair is reported, never silent")
+        XCTAssertEqual(drifts.first?.0, "cfg-A")
+        XCTAssertEqual(drifts.first?.1, "cfg-B")
     }
 
     func testSetPinPatternPersistsImmediately() {

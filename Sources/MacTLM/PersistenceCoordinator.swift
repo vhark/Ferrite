@@ -59,6 +59,12 @@ final class PersistenceCoordinator {
             configKey: { ScreenGeometry.currentConfiguration.key },
             visibleArea: { ScreenGeometry.cgVisibleAreaOfMainScreen },
             excludeList: { [excludeBox] in excludeBox.list })
+        // A missed didChangeScreenParameters used to stop capture dead; the
+        // tracker now repairs itself, and this is the only trace it leaves.
+        tracker.onConfigurationDrift = { stale, live in
+            NSLog("MacTLM: display configuration drifted unnoticed (%@ -> %@); "
+                  + "migrated records namespace mid-capture", stale, live)
+        }
         engine = RestoreEngine(driver: driver)
     }
 

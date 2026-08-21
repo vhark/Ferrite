@@ -15,6 +15,11 @@ public final class WindowTracker {
     private var records: ConfigurationRecords
     private var loadedKey: String
 
+    /// Called when a capture discovers the live configuration key no longer
+    /// matches the loaded one and migrates itself (old key, new key). Core is
+    /// Foundation-only and has no logger of its own; the app layer logs this.
+    public var onConfigurationDrift: ((String, String) -> Void)?
+
     public init(driver: WindowDriving, store: LayoutStore,
                 configKey: @escaping () -> String,
                 visibleArea: @escaping () -> CGRect,
@@ -33,9 +38,26 @@ public final class WindowTracker {
     /// Call on window created/moved/resized/title-changed for an app.
     public func noteActivity(bundleID: String) {
         guard !excludeList().isExcluded(bundleID) else { return }
-        guard configKey() == loadedKey else { return } // mid-config-change; caller reloads next
+        healDriftIfNeeded()
         capture(bundleID: bundleID)
         saveDebouncer.call { [weak self] in self?.persist() }
+    }
+
+    /// The display configuration can change without
+    /// `reloadForCurrentConfiguration()` ever running — a
+    /// `didChangeScreenParameters` notification that is missed, coalesced, or
+    /// arrives while paused. Until M2e that stranded the tracker on a dead
+    /// namespace and every later capture was dropped, silently and forever.
+    ///
+    /// Migrating here keeps the original intent of that guard: records captured
+    /// under configuration A are flushed to A's file *before* the swap, so
+    /// nothing is written into B's file that belongs to A.
+    private func healDriftIfNeeded() {
+        let live = configKey()
+        guard live != loadedKey else { return }
+        let stale = loadedKey
+        migrate(to: live)
+        onConfigurationDrift?(stale, live)
     }
 
     /// Call when an app terminates — flush immediately (quit snapshot).
@@ -87,9 +109,16 @@ public final class WindowTracker {
 
     /// Call when the display configuration changes: swap namespaces.
     public func reloadForCurrentConfiguration() {
+        migrate(to: configKey())
+    }
+
+    /// Flushes the loaded namespace, then adopts `key` and loads its records.
+    /// Single migration implementation: the notified path and the drift-repair
+    /// path must not be able to diverge.
+    private func migrate(to key: String) {
         saveDebouncer.cancel()
         persist() // flush old namespace before swapping
-        loadedKey = configKey()
+        loadedKey = key
         records = store.loadPurgingLegacyTitles(configKey: loadedKey)
     }
 
