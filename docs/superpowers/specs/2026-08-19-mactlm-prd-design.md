@@ -38,7 +38,7 @@ Personal tool first — the author's daily workflow is the spec — published as
 
 - **Automatic for all apps**, with a user-editable exclude list. Ships with a default exclude list seeded from Rectangle's known-hostile set (apps that fight external frame changes).
 - **Reapply triggers:** app launch, user login, and display-configuration change. Manual window moves are respected until the next reapply trigger; persistence is never continuously enforced (that behavior belongs to magnet groups, and only within a group).
-- **Multi-window apps:** N remembered windows → N restored frames. Matching is heuristic (window count, title similarity, creation order). Optional **pin rules** map a title pattern to a specific remembered slot (e.g. an Arc profile name) when identity matters.
+- **Multi-window apps:** N remembered windows → N restored frames. Matching is heuristic (window count, window-identity hash, creation order). Optional **pin rules** map a title pattern to a specific remembered slot (e.g. an Arc profile name) when identity matters. Pin patterns are user-authored and matched against *live* titles at match time, so they work without any title being stored.
 - Frames are captured on window move/resize (debounced ~2 s) and on app quit.
 
 ### 3.2 Phase 2 — Workspace templates (M2)
@@ -119,7 +119,9 @@ The Layout Core imports no AppKit. The Linux port (post-M4) reuses schema, solve
 Human-readable JSON in `~/Library/Application Support/MacTLM/` (inspectable, hand-editable, git/Nextcloud-syncable). All frame data namespaced by **display configuration** (hash of connected displays' resolution + scale), so config changes never corrupt other configs' data.
 
 - **Frames** are normalized `{x, y, w, h}` fractions of the assigned display's *visible* area, stored with the display's UUID and captured metrics (point size, aspect ratio). Same display → exact reproduction; different display → scalable.
-- **WindowRecord:** bundle ID, normalized frame, title snapshot, optional pin rule (title pattern → slot), z-order hint, last-seen timestamp.
+- **WindowRecord:** bundle ID, normalized frame, window-identity hash, optional pin rule (title pattern → slot), z-order hint, last-seen timestamp.
+
+**Window titles are never persisted (amended 2026-08-20, M2d).** The original design stored a title snapshot for matching, which put browser page titles — i.e. browsing history — into files this section designs to be syncable. Records and layout entries instead carry `titleHash`: `SHA-256(per-install salt ‖ title)` truncated to 16 hex characters, computed in the macOS layer (CryptoKit) so `MacTLMCore` stays portable. Exact-window matching survives as hash equality; untitled windows hash to `nil` and never match each other. The salt lives in `UserDefaults` (`~/Library/Preferences/`), deliberately outside the synced Application Support directory. Honest limit: a holder of both the files and the salt can confirm a guessed title, though not read titles out; Keychain storage is the stricter future option. Legacy plaintext keys are ignored on decode and scrubbed from every namespace at startup.
 - **Layout (per-monitor):** name, hotkey, stage mode, display UUID + metrics, ordered entries `{bundleID, frame, zOrder, pinRule?, optional?}`.
 - **Bundle:** named set of per-monitor layouts launched as one workspace.
 - **MagnetGroup:** member window refs, adjacency edges, resize mode (shrink/nudge), active preset + per-member weights + bias.

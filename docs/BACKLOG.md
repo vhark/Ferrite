@@ -11,10 +11,14 @@ Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpower
 | `v0.2.1-m2a` | Stacking correctness | Excluded and late-launching apps join the template z-order cascade; apps launch backmost-first |
 | `v0.2.2-m2a` | Install + login item | `scripts/install.sh` puts the daily driver in `/Applications` and registers it for Launch at Login; the menu now reports registration failures and the `requiresApproval` state instead of failing silently; `--login-status/--login-register/--login-unregister` probes |
 | `v0.3.0-m2b` | Bundles, hotkeys, Preferences | Same-name layouts across displays form a workspace bundle launched as one operation; per-bundle global hotkeys (KeyboardShortcuts 3.0.1); SwiftUI Layouts window with rename, stage toggle, hotkey recorder, and archive; archive replaces delete, permanent delete only from the archive behind a confirmation |
+| `v0.4.0-m2c` | Apps tab, entry editing | Preferences gains an Apps tab (exclude toggle, pin editing, Forget stale records) and per-entry editing in the Layouts tab; one workspace row per layout set with an explicit display submenu, replacing three identically-labelled rows; `--list-displays` and `--apply-bundle` diagnostics |
+| `v0.5.0-m2d` | Hashed window identity | Window titles are never persisted; records and layout entries carry a salted per-install `titleHash`; live titles shown in Preferences only; legacy plaintext scrubbed from every namespace at startup; pin edits fixed to reach every namespace holding the slot |
 
 **PRD §9 acceptance: PASSED** live on 2026-08-19 — `Design&Comms` restored from a cold start (Illustrator, both Arcs, Paseo, Nextcloud Talk, Finder, Spotify, Obsidian, Rambox), apps relaunching into place one by one. The single defect it exposed (Illustrator covering the layout) is fixed in `v0.2.1-m2a` and re-verified.
 
-Test suite: 90 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
+Test suite: 125 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
+
+**Multi-display validated 2026-08-20** — a second display (laptop built-in alongside the ultrawide) made the bundle path testable for the first time. `--apply-bundle` placed both laptop windows pixel-exact, confirming `MultiApplyPlanner` and the per-display `visibleArea` plumbing correct.
 
 **PRD §9 hotkey acceptance: PASSED** live on 2026-08-20 — one recorded hotkey (⌘⌥⌥1-style combo) restores the whole workspace, the shortcut is displayed on its menu row, and renaming the workspace migrates the shortcut with it.
 
@@ -37,13 +41,18 @@ Test suite: 90 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and S
 11. **Adding a Codable field to a fail-soft store can destroy user data.** `LayoutLibraryStore.load()` returns an empty library on any decode error, and the next save writes that empty library back. So a new non-optional field on `LayoutLibrary` would have silently wiped a real `layouts.json` written before the field existed. Every new field needs an absent-tolerant `init(from:)` using `decodeIfPresent`, plus a test that decodes a literal legacy-shaped payload (`testLegacyJSONWithoutArchiveKeyStillDecodes`). Back up the live file before touching the format.
 12. **KeyboardShortcuts 3.0.1 is `@MainActor`** (its `Package.swift` sets `.defaultIsolation(MainActor.self)`), while `PersistenceCoordinator` is nonisolated. Void-returning calls hop via `DispatchQueue.main.async`; the value-returning `shortcut(forBundle:)` is annotated `@MainActor` instead, since a hop would change its signature and `MainActor.assumeIsolated` needs macOS 14 (we target 13). Menu code that reads shortcuts needs `@MainActor` on the specific method — `NSMenuDelegate` callbacks are already isolated, so no cascade.
 13. **Dynamic `KeyboardShortcuts.Name`s work and survive renames.** Names are built at runtime from the bundle name (`"bundle-<name>"`), and assignments live in `UserDefaults` under that name — so archiving a workspace keeps its hotkey (we simply stop registering a handler), and renaming migrates it with `getShortcut`/`setShortcut`/`reset`.
+14. **Persisted window titles are a privacy leak, because the files are designed to be synced.** PRD §7 makes `layouts.json` and `configurations/*.json` git/Nextcloud-friendly, and titles captured browser page titles — i.e. browsing history — in plaintext. Fixed by storing `SHA-256(per-install salt ‖ title)` truncated to 16 hex chars. Matching fidelity is preserved because exact-window matching only ever needed *equality*, not the text. Untitled windows must hash to `nil`, never a shared constant, or every untitled window matches every other. Pins are unaffected: they are user-authored patterns tested against live titles in memory.
+15. **A stopped-clock purge is not a purge.** Blanking titles on disk while the daemon ran was undone within seconds — the tracker holds records in memory and re-persists them. Any data-scrubbing operation has to either stop the writer first or ship in the writer itself.
+16. **Namespace-scoped edits silently no-op.** `ConfigurationRecords.setPinPattern` guards on the record existing, so when the display configuration changed between the Preferences window rendering its rows and the user submitting a pin, the edit hit a namespace without that record and vanished with no error. Two lessons: a pin describes a *window*, not a monitor arrangement, so it now propagates to every namespace holding that bundle/slot; and any UI over per-configuration data needs a display-change hook to refresh (`PersistenceCoordinator.onConfigurationChanged`).
+17. **Dead migration code is worse than none.** `LayoutLibraryStore.loadPurgingLegacyTitles()` shipped with no caller, so `layouts.json` kept 18 legacy `title` keys, and only the *loaded* namespace was ever scrubbed — 3 of 4 config files kept theirs. Verified by grepping for callers on the real files, not by trusting the unit test that covered the unreachable function.
 
-## M2c (next milestone)
+## M2e / M3 (next)
 
-- **Apps tab in Preferences** — edit the exclude list and pin rules from the UI. Both are JSON-edit-only today (the exclude list also has the menu's "Exclude Frontmost App"), and `optional` entry flags remain JSON-only.
-- **Target display choice** — when a layout's own display is absent we always adapt onto the main display; offer a picker.
-- **Per-app merged placement** — needed to fix the two-displays-one-app residual below, once a second monitor exists to test against.
-- **Entry-level editing** — reorder or drop individual windows within a saved layout (today: re-snapshot).
+- **PRD Phase 3 — magnet groups and the weighted treemap** (the headline remaining feature): drag-to-mate grouping, shared-edge resize with shrink/nudge, and preset reflows including the center/left/right-biased treemap. Now that a second display exists, Tier-2 structural reflow is testable too.
+- **Per-app merged placement** — fix the residual below; now testable with two displays attached.
+- **Target display choice** — when a layout's display is absent we always adapt onto the main display; offer a picker.
+- **Keychain salt** — stricter storage for the window-identity salt than `UserDefaults`.
+- **Re-hash on demand** — pre-M2d records carry `titleHash: nil` until their window moves again, so exact matching is degraded for them; a "relearn positions" action could refresh them deliberately.
 
 ## Accepted residuals
 
