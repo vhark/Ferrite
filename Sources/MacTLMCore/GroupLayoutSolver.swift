@@ -42,12 +42,15 @@ public enum GroupLayoutSolver {
 
     /// Solved frames keyed by tile id. `gap` is the total spacing between
     /// neighbours; each tile is inset by half of it, so the group's outer edge
-    /// still touches `bounds`.
+    /// still touches `bounds`. Tiles smaller than `minimumSize` are grown last.
     public static func solve(tiles: [Tile], preset: Preset,
-                            in bounds: CGRect, gap: CGFloat) -> [Int: CGRect] {
+                            in bounds: CGRect, gap: CGFloat,
+                            minimumSize: CGSize = .zero) -> [Int: CGRect] {
         guard !tiles.isEmpty, bounds.width > 0, bounds.height > 0 else { return [:] }
-        guard tiles.count > 1 else { return [tiles[0].id: applyGap(bounds, gap: gap,
-                                                                  bounds: bounds)] }
+        guard tiles.count > 1 else {
+            return clamp([tiles[0].id: applyGap(bounds, gap: gap, bounds: bounds)],
+                         to: minimumSize, bounds: bounds)
+        }
         let raw: [Int: CGRect]
         switch preset {
         case .columns:
@@ -64,7 +67,8 @@ public enum GroupLayoutSolver {
         case .treemap(let bias):
             raw = treemap(tiles, in: bounds, bias: bias)
         }
-        return raw.mapValues { applyGap($0, gap: gap, bounds: bounds) }
+        return clamp(raw.mapValues { applyGap($0, gap: gap, bounds: bounds) },
+                     to: minimumSize, bounds: bounds)
     }
 
     // MARK: - Even presets
@@ -239,5 +243,26 @@ public enum GroupLayoutSolver {
         let gapped = rect.insetBy(dx: inset, dy: inset)
         guard gapped.width > 1, gapped.height > 1 else { return rect }
         return gapped
+    }
+
+    // MARK: - Minimum size
+
+    /// Grows any tile below `minimumSize`, keeping it inside `bounds`.
+    /// Overlap is accepted here: an unusably thin window is worse than two
+    /// windows sharing pixels (PRD §8's stated mitigation).
+    private static func clamp(_ rects: [Int: CGRect], to minimumSize: CGSize,
+                             bounds: CGRect) -> [Int: CGRect] {
+        guard minimumSize.width > 0 || minimumSize.height > 0 else { return rects }
+        return rects.mapValues { rect in
+            let width = min(max(rect.width, minimumSize.width), bounds.width)
+            let height = min(max(rect.height, minimumSize.height), bounds.height)
+            var adjusted = CGRect(x: rect.minX, y: rect.minY,
+                                  width: width, height: height)
+            if adjusted.maxX > bounds.maxX { adjusted.origin.x = bounds.maxX - width }
+            if adjusted.maxY > bounds.maxY { adjusted.origin.y = bounds.maxY - height }
+            adjusted.origin.x = max(adjusted.origin.x, bounds.minX)
+            adjusted.origin.y = max(adjusted.origin.y, bounds.minY)
+            return adjusted
+        }
     }
 }
