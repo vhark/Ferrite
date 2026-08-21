@@ -23,6 +23,18 @@ public final class LayoutStore {
         return records
     }
 
+    /// Loads, and if the file still contains a legacy plaintext `title` key,
+    /// immediately rewrites it without one. Titles were never meant to be at
+    /// rest (PRD §7 files are syncable), so the scrub happens on first read.
+    public func loadPurgingLegacyTitles(configKey: String) -> ConfigurationRecords {
+        let records = load(configKey: configKey)
+        guard let data = try? Data(contentsOf: url(for: configKey)),
+              let text = String(data: data, encoding: .utf8),
+              text.contains("\"title\"") else { return records }
+        try? save(records, configKey: configKey)   // re-encodes without the dropped key
+        return records
+    }
+
     public func save(_ records: ConfigurationRecords, configKey: String) throws {
         try encoder.encode(records).write(to: url(for: configKey), options: .atomic)
     }

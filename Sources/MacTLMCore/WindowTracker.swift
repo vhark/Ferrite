@@ -27,7 +27,7 @@ public final class WindowTracker {
         self.excludeList = excludeList
         self.saveDebouncer = Debouncer(delay: saveDelay)
         self.loadedKey = configKey()
-        self.records = store.load(configKey: loadedKey)
+        self.records = store.loadPurgingLegacyTitles(configKey: loadedKey)
     }
 
     /// Call on window created/moved/resized/title-changed for an app.
@@ -76,7 +76,7 @@ public final class WindowTracker {
         saveDebouncer.cancel()
         persist() // flush old namespace before swapping
         loadedKey = configKey()
-        records = store.load(configKey: loadedKey)
+        records = store.loadPurgingLegacyTitles(configKey: loadedKey)
     }
 
     private func capture(bundleID: String) {

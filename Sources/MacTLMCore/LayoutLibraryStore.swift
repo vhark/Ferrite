@@ -21,6 +21,18 @@ public final class LayoutLibraryStore {
         return library
     }
 
+    /// Loads, and if the file still contains a legacy plaintext `title` key,
+    /// immediately rewrites it without one. Titles were never meant to be at
+    /// rest (PRD §7 files are syncable), so the scrub happens on first read.
+    public func loadPurgingLegacyTitles() -> LayoutLibrary {
+        let library = load()
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8),
+              text.contains("\"title\"") else { return library }
+        try? save(library)   // re-encodes without the dropped key
+        return library
+    }
+
     public func save(_ library: LayoutLibrary) throws {
         try encoder.encode(library).write(to: url, options: .atomic)
     }
