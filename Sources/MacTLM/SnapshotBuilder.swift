@@ -5,7 +5,8 @@ import MacTLMCore
 enum SnapshotBuilder {
     static func snapshot(name: String, stageMode: StageMode) -> [MonitorLayout] {
         var axRefs: [ZOrderMatcher.AXRef] = []
-        var meta: [Int: (bundleID: String, title: String, frame: CGRect)] = [:]
+        var meta: [Int: (bundleID: String, title: String,
+                         titleHash: String?, frame: CGRect)] = [:]
         var seenBundles = Set<String>()
 
         for app in NSWorkspace.shared.runningApplications
@@ -22,7 +23,8 @@ enum SnapshotBuilder {
                 let id = window.stableID
                 axRefs.append(ZOrderMatcher.AXRef(id: id, pid: app.processIdentifier,
                                                   frame: frame))
-                meta[id] = (bundleID, window.title, frame)
+                meta[id] = (bundleID, window.title,
+                            WindowIdentity.hash(window.title), frame)
             }
         }
 
@@ -31,7 +33,7 @@ enum SnapshotBuilder {
         let windows = meta.compactMap { id, m -> SnapshotPlanner.Window? in
             guard let z = zIndices[id] else { return nil }
             return SnapshotPlanner.Window(bundleID: m.bundleID, title: m.title,
-                                          titleHash: nil,
+                                          titleHash: m.titleHash,
                                           frame: m.frame, zIndex: z)
         }
         return SnapshotPlanner.plan(name: name, stageMode: stageMode,
