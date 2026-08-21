@@ -29,6 +29,9 @@ final class PersistenceCoordinator {
     private var pendingSettles: [String: PendingSettle] = [:]
     private var screenToken: NSObjectProtocol?
     var isPaused = false
+    /// Fires after the record namespace has been swapped, so open UI can
+    /// re-read instead of showing the previous configuration's records.
+    var onConfigurationChanged: (() -> Void)?
 
     var currentExcludedBundleIDs: Set<String> { excludeList.bundleIDs }
 
@@ -104,6 +107,9 @@ final class PersistenceCoordinator {
                 guard let self, !self.isPaused else { return }
                 self.tracker.reloadForCurrentConfiguration()
                 self.restoreAll()
+                // The Apps tab lists one namespace's records; after a swap its
+                // rows describe records the tracker no longer holds.
+                self.onConfigurationChanged?()
         }
 
         // Login trigger: launched at login → restore everything after a grace

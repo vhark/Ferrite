@@ -129,6 +129,9 @@ final class AppsPreferencesModel: ObservableObject {
     init(coordinator: PersistenceCoordinator) {
         self.coordinator = coordinator
         reload()
+        // A display change swaps the namespace under this list; without a
+        // re-read the rows would describe records the tracker no longer holds.
+        coordinator.onConfigurationChanged = { [weak self] in self?.reload() }
     }
 
     func reload() {

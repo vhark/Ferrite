@@ -55,9 +55,23 @@ public final class WindowTracker {
 
     /// Sets or clears a pin, then flushes. Pin edits come from the UI, so they
     /// must not wait on the capture debounce (and must not be clobbered by it).
+    ///
+    /// A pin describes a window, not a monitor arrangement, so it is applied to
+    /// every namespace that remembers this slot — including ones not loaded.
+    /// Without that, an edit made after a display change reached no file at
+    /// all: the Apps tab still lists the namespace it opened with while the
+    /// tracker has already swapped to one that has no record for the slot, so
+    /// the mutation was a silent no-op.
     public func setPinPattern(_ pattern: String?, bundleID: String, slot: Int) {
         records.setPinPattern(pattern, bundleID: bundleID, slot: slot)
         persist()
+        for key in store.configKeys() where key != loadedKey {
+            var other = store.load(configKey: key)
+            let before = other
+            other.setPinPattern(pattern, bundleID: bundleID, slot: slot)
+            guard other != before else { continue }
+            try? store.save(other, configKey: key)
+        }
     }
 
     /// Forgets every remembered window for an app, then flushes.

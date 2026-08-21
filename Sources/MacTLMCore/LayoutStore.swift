@@ -35,6 +35,17 @@ public final class LayoutStore {
         return records
     }
 
+    /// Every display-configuration namespace with a file on disk. Pin edits
+    /// reach across namespaces, so the tracker needs to know which exist.
+    public func configKeys() -> [String] {
+        let contents = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)
+        return (contents ?? [])
+            .filter { $0.pathExtension == "json" }
+            .map { $0.deletingPathExtension().lastPathComponent }
+            .sorted()
+    }
+
     public func save(_ records: ConfigurationRecords, configKey: String) throws {
         try encoder.encode(records).write(to: url(for: configKey), options: .atomic)
     }
