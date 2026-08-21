@@ -30,10 +30,8 @@ public enum GroupLayoutSolver {
         case treemap(bias: TreemapBias)
 
         /// The presets that ignore weights — used by exhaustive tests.
-        // TEMPORARY (Task 1 only): `.symmetric` needs `partition`, which lands
-        // in Task 2. Restored there.
         public static let allBasicCases: [Preset] = [.columns, .rows, .grid,
-                                                     .mainSide]
+                                                     .mainSide, .symmetric]
     }
 
     public enum TreemapBias: Equatable {
@@ -119,15 +117,59 @@ public enum GroupLayoutSolver {
 
     // MARK: - Weighted presets (Task 2 / Task 3)
 
+    /// Recursively splits `bounds` along its longer axis, giving each side a
+    /// share equal to its weight. Because every split is proportional, a tile's
+    /// final area is its weight share of the whole box — which is what makes
+    /// the treemap verifiable by arithmetic.
     private static func partition(_ tiles: [Tile], in bounds: CGRect) -> [Int: CGRect] {
-        _ = (tiles, bounds)
-        fatalError("implemented in Task 2")
+        guard tiles.count > 1 else {
+            return tiles.isEmpty ? [:] : [tiles[0].id: bounds]
+        }
+        let ordered = tiles.sorted { lhs, rhs in
+            lhs.weight == rhs.weight ? lhs.id < rhs.id : lhs.weight > rhs.weight
+        }
+        let total = ordered.reduce(0.0) { $0 + $1.weight }
+        // Greedy prefix closest to half the weight, always leaving both sides
+        // non-empty so the recursion terminates.
+        var accumulated = 0.0
+        var splitIndex = 1
+        for (index, tile) in ordered.enumerated() {
+            accumulated += tile.weight
+            if accumulated >= total / 2 {
+                splitIndex = min(max(index + 1, 1), ordered.count - 1)
+                break
+            }
+        }
+        let head = Array(ordered[..<splitIndex])
+        let tail = Array(ordered[splitIndex...])
+        let headWeight = head.reduce(0.0) { $0 + $1.weight }
+        let fraction = CGFloat(headWeight / total)
+
+        let headBounds: CGRect
+        let tailBounds: CGRect
+        if bounds.width >= bounds.height {
+            let cut = bounds.width * fraction
+            headBounds = CGRect(x: bounds.minX, y: bounds.minY,
+                                width: cut, height: bounds.height)
+            tailBounds = CGRect(x: bounds.minX + cut, y: bounds.minY,
+                                width: bounds.width - cut, height: bounds.height)
+        } else {
+            let cut = bounds.height * fraction
+            headBounds = CGRect(x: bounds.minX, y: bounds.minY,
+                                width: bounds.width, height: cut)
+            tailBounds = CGRect(x: bounds.minX, y: bounds.minY + cut,
+                                width: bounds.width, height: bounds.height - cut)
+        }
+        return partition(head, in: headBounds)
+            .merging(partition(tail, in: tailBounds)) { first, _ in first }
     }
 
+    // TEMPORARY (Task 2 only): bias-aware placement lands in Task 3; until then
+    // the treemap is the unbiased weight-proportional partition.
     private static func treemap(_ tiles: [Tile], in bounds: CGRect,
                                bias: TreemapBias) -> [Int: CGRect] {
-        _ = (tiles, bounds, bias)
-        fatalError("implemented in Task 3")
+        _ = bias
+        return partition(tiles, in: bounds)
     }
 
     // MARK: - Gap
