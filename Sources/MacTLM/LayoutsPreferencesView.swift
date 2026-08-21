@@ -140,6 +140,7 @@ private struct LayoutEntriesGroup: View {
             } else {
                 ForEach(Array(layout.entries.enumerated()), id: \.offset) { index, entry in
                     LayoutEntryRow(entry: entry, index: index,
+                                   liveTitle: model.liveEntryTitles[layout.id]?[index],
                                    layoutID: layout.id, model: model)
                 }
             }
@@ -151,6 +152,9 @@ private struct LayoutEntriesGroup: View {
 private struct LayoutEntryRow: View {
     let entry: LayoutEntry
     let index: Int
+    /// The title of the open window this entry's identity hash matches, if any.
+    /// Read live from the driver — the file holds only the hash.
+    let liveTitle: String?
     let layoutID: UUID
     @ObservedObject var model: LayoutsPreferencesModel
 
@@ -163,10 +167,12 @@ private struct LayoutEntryRow: View {
             Text(PersistenceCoordinator.localizedAppName(forBundleID: entry.bundleID))
                 .lineLimit(1)
                 .frame(width: 140, alignment: .leading)
-            // Entries carry only an opaque identity hash, never readable text.
-            Text("Window \(index + 1)")
+            // Entries carry only an opaque identity hash, never readable text,
+            // so an unmatched entry can only name its position.
+            Text(liveTitle ?? "Window \(index + 1)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(liveTitle == nil ? AnyShapeStyle(.secondary)
+                                                  : AnyShapeStyle(.primary))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -213,6 +219,9 @@ private struct ArchivedLayoutRow: View {
 final class LayoutsPreferencesModel: ObservableObject {
     @Published var bundles: [LayoutBundle] = []
     @Published var archivedBundles: [LayoutBundle] = []
+    /// layout id → (entry index → live window title). Refreshed on reload;
+    /// titles never come from the saved file.
+    @Published var liveEntryTitles: [UUID: [Int: String]] = [:]
     private let coordinator: PersistenceCoordinator
 
     init(coordinator: PersistenceCoordinator) {
@@ -223,6 +232,13 @@ final class LayoutsPreferencesModel: ObservableObject {
     func reload() {
         bundles = coordinator.loadBundles()
         archivedBundles = coordinator.loadArchivedBundles()
+        // Asking the driver once per reload, not once per row: entry rows are
+        // rebuilt on every layout pass and AX lookups are not free.
+        var titles: [UUID: [Int: String]] = [:]
+        for layout in bundles.flatMap(\.layouts) {
+            titles[layout.id] = coordinator.liveEntryTitles(forLayout: layout)
+        }
+        liveEntryTitles = titles
     }
 
     func rename(from oldName: String, to newName: String) {

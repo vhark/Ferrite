@@ -25,6 +25,9 @@ struct AppsPreferencesView: View {
                  + "is remembered for the monitors attached right now.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            Text("Window titles are shown live and never saved to disk.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(minWidth: 600, minHeight: 340)
@@ -50,7 +53,8 @@ private struct AppRecordSection: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(app.slots, id: \.slot) { record in
-                SlotRow(bundleID: app.bundleID, record: record, model: model)
+                SlotRow(bundleID: app.bundleID, record: record,
+                        liveTitle: app.liveTitles[record.slot], model: model)
             }
             Text("A pin re-attaches a remembered position to the window whose "
                  + "title matches this pattern.")
@@ -83,6 +87,9 @@ private struct AppRecordSection: View {
 private struct SlotRow: View {
     let bundleID: String
     let record: WindowRecord
+    /// The title of the window sitting in this slot right now, if the app is
+    /// running and a window matched. Never comes from disk.
+    let liveTitle: String?
     @ObservedObject var model: AppsPreferencesModel
     @State private var draftPin = ""
 
@@ -92,9 +99,11 @@ private struct SlotRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 54, alignment: .leading)
-            // Titles are never persisted, so a record identifies itself by slot.
-            Text("Window \(record.slot + 1)")
-                .foregroundStyle(.secondary)
+            // Titles are never persisted, so a slot with no live window can
+            // only identify itself by position.
+            Text(liveTitle ?? "Window \(record.slot + 1)")
+                .foregroundStyle(liveTitle == nil ? AnyShapeStyle(.secondary)
+                                                  : AnyShapeStyle(.primary))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -206,6 +206,9 @@ final class PersistenceCoordinator {
         let displayName: String
         let slots: [WindowRecord]
         let isExcluded: Bool
+        /// slot → the title of the window currently occupying it. Live and
+        /// in-memory only; empty when the app is not running.
+        let liveTitles: [Int: String]
         var id: String { bundleID }
     }
 
@@ -213,14 +216,59 @@ final class PersistenceCoordinator {
         let excluded = excludeList.bundleIDs
         return tracker.allRecords()
             .map { bundleID, slots in
-                AppRecordSummary(
+                let ordered = slots.sorted { $0.slot < $1.slot }
+                return AppRecordSummary(
                     bundleID: bundleID,
                     displayName: Self.localizedAppName(forBundleID: bundleID),
-                    slots: slots.sorted { $0.slot < $1.slot },
-                    isExcluded: excluded.contains(bundleID))
+                    slots: ordered,
+                    isExcluded: excluded.contains(bundleID),
+                    liveTitles: liveTitles(forRecords: ordered, bundleID: bundleID))
             }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
                 == .orderedAscending }
+    }
+
+    /// Runs the same assignment a restore would, so the title shown against a
+    /// slot is the window that slot's frame would actually be applied to.
+    private func liveTitles(forRecords records: [WindowRecord],
+                            bundleID: String) -> [Int: String] {
+        let windows = driver.windows(ofBundleID: bundleID)
+        guard !windows.isEmpty else { return [:] }
+        let candidates = windows.enumerated().map { index, window in
+            WindowCandidate(id: window.id, title: window.title,
+                            titleHash: window.titleHash, order: index)
+        }
+        let assignment = WindowMatcher.assign(
+            records: records, to: candidates,
+            allowOrderFallback: windows.count >= records.count)
+        var titles: [Int: String] = [:]
+        for window in windows where !window.title.isEmpty {
+            guard let record = assignment[window.id] else { continue }
+            titles[record.slot] = window.title
+        }
+        return titles
+    }
+
+    /// Entry index → live title for one saved layout. Entries persist only an
+    /// opaque identity hash, so a title appears when the app has a window open
+    /// with the same hash; anything else stays absent and the row falls back to
+    /// its position label.
+    func liveEntryTitles(forLayout layout: MonitorLayout) -> [Int: String] {
+        var titlesByBundle: [String: [String: String]] = [:]  // bundle → hash → title
+        var result: [Int: String] = [:]
+        for (index, entry) in layout.entries.enumerated() {
+            guard let hash = entry.titleHash else { continue }
+            if titlesByBundle[entry.bundleID] == nil {
+                var map: [String: String] = [:]
+                for window in driver.windows(ofBundleID: entry.bundleID)
+                where !window.title.isEmpty {
+                    if let windowHash = window.titleHash { map[windowHash] = window.title }
+                }
+                titlesByBundle[entry.bundleID] = map
+            }
+            if let title = titlesByBundle[entry.bundleID]?[hash] { result[index] = title }
+        }
+        return result
     }
 
     /// Best-effort human name; falls back to the bundle ID for apps that are
