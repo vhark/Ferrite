@@ -168,6 +168,16 @@ final class PersistenceCoordinator {
         templateLauncher.apply(layouts, excludedBundleIDs: currentExcludedBundleIDs)
     }
 
+    /// Reflows the display holding the frontmost window into `preset`. A reflow
+    /// is a normal window move: the tracker records the new frames afterwards,
+    /// so the arrangement is remembered like any other.
+    func reflowDisplay(_ preset: GroupLayoutSolver.Preset) {
+        let reflow = DisplayGroupReflow(driver: driver,
+                                        excludedBundleIDs: currentExcludedBundleIDs)
+        let moved = reflow.apply(preset)
+        NSLog("MacTLM: reflow %@ moved %d windows", String(describing: preset), moved)
+    }
+
     func renameBundle(from oldName: String, to newName: String) {
         var library = layoutLibraryStore.load()
         library.renameBundle(from: oldName, to: newName)

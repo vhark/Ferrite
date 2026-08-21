@@ -45,7 +45,9 @@ public final class RestoreEngine {
 }
 
 extension CGRect {
-    func approximatelyEquals(_ other: CGRect, tolerance: CGFloat) -> Bool {
+    /// Frame comparison used by every applier: the driver's read-back frame is
+    /// never bit-exact, so "did the app accept it?" is a tolerance question.
+    public func approximatelyEquals(_ other: CGRect, tolerance: CGFloat) -> Bool {
         abs(minX - other.minX) <= tolerance
             && abs(minY - other.minY) <= tolerance
             && abs(width - other.width) <= tolerance

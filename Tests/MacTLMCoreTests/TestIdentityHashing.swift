@@ -10,8 +10,11 @@ func testHash(_ title: String) -> String? {
 
 extension DriverWindow {
     /// Test convenience mirroring `MacWindowDriver`: derives the identity hash
-    /// from the live title, exactly as the real driver layer does.
-    init(id: Int, title: String, frame: CGRect) {
-        self.init(id: id, title: title, titleHash: testHash(title), frame: frame)
+    /// from the live title, exactly as the real driver layer does. `pid` only
+    /// matters to the z-order matcher, which Core tests do not exercise, so it
+    /// defaults rather than being spelled out at ~30 call sites.
+    init(id: Int, pid: pid_t = 0, title: String, frame: CGRect) {
+        self.init(id: id, pid: pid, title: title,
+                  titleHash: testHash(title), frame: frame)
     }
 }

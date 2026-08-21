@@ -23,6 +23,7 @@ final class MacWindowDriver: WindowDriving {
                 handleCache[window.stableID] = window
                 ids.append(window.stableID)
                 result.append(DriverWindow(id: window.stableID,
+                                           pid: app.processIdentifier,
                                            title: window.title,
                                            titleHash: WindowIdentity.hash(window.title),
                                            frame: frame))
