@@ -3,7 +3,7 @@ import XCTest
 
 final class LayoutEntryEditingTests: XCTestCase {
     private func entry(_ bundleID: String, z: Int, optional: Bool = false) -> LayoutEntry {
-        LayoutEntry(bundleID: bundleID, title: "\(bundleID) window",
+        LayoutEntry(bundleID: bundleID, titleHash: testHash("\(bundleID) window"),
                     frame: NormalizedFrame(x: 0, y: 0, w: 0.5, h: 0.9),
                     zIndex: z, pinPattern: nil, optional: optional)
     }

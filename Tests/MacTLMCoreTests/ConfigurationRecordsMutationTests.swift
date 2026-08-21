@@ -2,15 +2,15 @@ import XCTest
 @testable import MacTLMCore
 
 final class ConfigurationRecordsMutationTests: XCTestCase {
-    private func record(slot: Int, title: String, pin: String? = nil) -> WindowRecord {
-        WindowRecord(slot: slot, title: title,
+    private func record(slot: Int, hash: String, pin: String? = nil) -> WindowRecord {
+        WindowRecord(slot: slot, titleHash: hash,
                      frame: NormalizedFrame(x: 0, y: 0, w: 0.5, h: 0.5),
                      pinPattern: pin, lastSeen: Date(timeIntervalSince1970: 0))
     }
 
     func testSetPinPatternOnSlot() {
         var records = ConfigurationRecords(apps: [
-            "arc": [record(slot: 0, title: "Work"), record(slot: 1, title: "Personal")],
+            "arc": [record(slot: 0, hash: "Work"), record(slot: 1, hash: "Personal")],
         ])
         records.setPinPattern("Work", bundleID: "arc", slot: 0)
         XCTAssertEqual(records.apps["arc"]?[0].pinPattern, "Work")
@@ -19,14 +19,14 @@ final class ConfigurationRecordsMutationTests: XCTestCase {
 
     func testClearPinPatternWithNil() {
         var records = ConfigurationRecords(apps: [
-            "arc": [record(slot: 0, title: "Work", pin: "Work")],
+            "arc": [record(slot: 0, hash: "Work", pin: "Work")],
         ])
         records.setPinPattern(nil, bundleID: "arc", slot: 0)
         XCTAssertNil(records.apps["arc"]?[0].pinPattern)
     }
 
     func testSetPinPatternIgnoresUnknownAppOrSlot() {
-        var records = ConfigurationRecords(apps: ["arc": [record(slot: 0, title: "Work")]])
+        var records = ConfigurationRecords(apps: ["arc": [record(slot: 0, hash: "Work")]])
         records.setPinPattern("X", bundleID: "nope", slot: 0)
         records.setPinPattern("X", bundleID: "arc", slot: 9)
         XCTAssertNil(records.apps["arc"]?[0].pinPattern)
@@ -35,8 +35,8 @@ final class ConfigurationRecordsMutationTests: XCTestCase {
 
     func testForgetAppRemovesEveryRecord() {
         var records = ConfigurationRecords(apps: [
-            "arc": [record(slot: 0, title: "Work")],
-            "junk": [record(slot: 0, title: "Open")],
+            "arc": [record(slot: 0, hash: "Work")],
+            "junk": [record(slot: 0, hash: "Open")],
         ])
         records.forgetApp(bundleID: "junk")
         XCTAssertNil(records.apps["junk"])
@@ -44,7 +44,7 @@ final class ConfigurationRecordsMutationTests: XCTestCase {
     }
 
     func testEmptyPinTreatedAsCleared() {
-        var records = ConfigurationRecords(apps: ["arc": [record(slot: 0, title: "W")]])
+        var records = ConfigurationRecords(apps: ["arc": [record(slot: 0, hash: "W")]])
         records.setPinPattern("   ", bundleID: "arc", slot: 0)
         XCTAssertNil(records.apps["arc"]?[0].pinPattern,
                      "whitespace-only pins must clear, not match everything")

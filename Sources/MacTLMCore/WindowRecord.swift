@@ -1,17 +1,36 @@
 import Foundation
 
 /// One remembered window of an app, within one display configuration.
+///
+/// `titleHash` is an opaque per-install identity (see `WindowIdentity` in the
+/// app layer), never the readable title: titles are browsing history and these
+/// files are designed to be syncable (PRD §7).
 public struct WindowRecord: Codable, Equatable {
     public var slot: Int              // stable index within the app's windows
-    public var title: String          // title snapshot at capture time
+    public var titleHash: String?     // opaque identity at capture time
     public var frame: NormalizedFrame
-    public var pinPattern: String?    // optional regex matched against titles
+    public var pinPattern: String?    // optional regex matched against live titles
     public var lastSeen: Date
 
-    public init(slot: Int, title: String, frame: NormalizedFrame,
+    /// Deliberately omits `title`: files written before hashed identities carry
+    /// that key, and it must be ignored on decode and never re-encoded.
+    enum CodingKeys: String, CodingKey {
+        case slot, titleHash, frame, pinPattern, lastSeen
+    }
+
+    public init(slot: Int, titleHash: String?, frame: NormalizedFrame,
                 pinPattern: String?, lastSeen: Date) {
-        self.slot = slot; self.title = title; self.frame = frame
+        self.slot = slot; self.titleHash = titleHash; self.frame = frame
         self.pinPattern = pinPattern; self.lastSeen = lastSeen
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        slot = try container.decode(Int.self, forKey: .slot)
+        titleHash = try container.decodeIfPresent(String.self, forKey: .titleHash)
+        frame = try container.decode(NormalizedFrame.self, forKey: .frame)
+        pinPattern = try container.decodeIfPresent(String.self, forKey: .pinPattern)
+        lastSeen = try container.decode(Date.self, forKey: .lastSeen)
     }
 }
 

@@ -92,7 +92,9 @@ private struct SlotRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 54, alignment: .leading)
-            Text(record.title.isEmpty ? "(untitled)" : record.title)
+            // Titles are never persisted, so a record identifies itself by slot.
+            Text("Window \(record.slot + 1)")
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)

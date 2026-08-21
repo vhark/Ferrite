@@ -88,7 +88,7 @@ public final class WindowTracker {
         let pins = assignPins(existing: existing, windows: windows)
         records.apps[bundleID] = windows.enumerated().map { index, window in
             WindowRecord(slot: index,
-                         title: window.title,
+                         titleHash: window.titleHash,
                          frame: NormalizedFrame(windowFrame: window.frame, visibleArea: area),
                          pinPattern: pins[index],
                          lastSeen: Date())

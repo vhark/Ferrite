@@ -22,7 +22,7 @@ final class LayoutStoreTests: XCTestCase {
     func testSaveThenLoadRoundTrips() throws {
         var records = ConfigurationRecords()
         records.apps["com.apple.finder"] = [
-            WindowRecord(slot: 0, title: "Downloads",
+            WindowRecord(slot: 0, titleHash: "h:Downloads",
                          frame: NormalizedFrame(x: 0.02, y: 0.20, w: 0.16, h: 0.60),
                          pinPattern: nil, lastSeen: Date(timeIntervalSince1970: 1_700_000_000)),
         ]

@@ -5,10 +5,10 @@ final class WindowRecordTests: XCTestCase {
     func testConfigurationRecordsCodableRoundTrip() throws {
         var records = ConfigurationRecords()
         records.apps["company.thebrowser.Browser"] = [
-            WindowRecord(slot: 0, title: "Work",
+            WindowRecord(slot: 0, titleHash: "h:Work",
                          frame: NormalizedFrame(x: 0.22, y: 0.05, w: 0.25, h: 0.90),
                          pinPattern: "Work", lastSeen: Date(timeIntervalSince1970: 1_700_000_000)),
-            WindowRecord(slot: 1, title: "Personal",
+            WindowRecord(slot: 1, titleHash: "h:Personal",
                          frame: NormalizedFrame(x: 0.48, y: 0.05, w: 0.25, h: 0.90),
                          pinPattern: nil, lastSeen: Date(timeIntervalSince1970: 1_700_000_000)),
         ]

@@ -19,7 +19,7 @@ final class MultiApplyPlannerTests: XCTestCase {
     }
 
     private func entry(_ bundleID: String, z: Int) -> LayoutEntry {
-        LayoutEntry(bundleID: bundleID, title: "",
+        LayoutEntry(bundleID: bundleID, titleHash: nil,
                     frame: NormalizedFrame(x: 0, y: 0, w: 0.5, h: 0.9),
                     zIndex: z, pinPattern: nil, optional: false)
     }

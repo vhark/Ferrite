@@ -31,6 +31,7 @@ enum SnapshotBuilder {
         let windows = meta.compactMap { id, m -> SnapshotPlanner.Window? in
             guard let z = zIndices[id] else { return nil }
             return SnapshotPlanner.Window(bundleID: m.bundleID, title: m.title,
+                                          titleHash: nil,
                                           frame: m.frame, zIndex: z)
         }
         return SnapshotPlanner.plan(name: name, stageMode: stageMode,

@@ -7,18 +7,37 @@ public enum StageMode: String, Codable, Equatable {
 }
 
 /// One window slot in a saved layout. zIndex 0 = frontmost.
+///
+/// `titleHash` is an opaque per-install identity (never readable text); it
+/// improves adopt matching without persisting a title.
 public struct LayoutEntry: Codable, Equatable {
     public var bundleID: String
-    public var title: String          // snapshot title, improves adopt matching
+    public var titleHash: String?     // opaque identity, improves adopt matching
     public var frame: NormalizedFrame
     public var zIndex: Int
     public var pinPattern: String?    // JSON-editable, like WindowRecord pins
     public var optional: Bool         // skipped when adapting to a smaller display
 
-    public init(bundleID: String, title: String, frame: NormalizedFrame,
+    /// Deliberately omits `title`: legacy files carry that key, and it must be
+    /// ignored on decode and never re-encoded.
+    enum CodingKeys: String, CodingKey {
+        case bundleID, titleHash, frame, zIndex, pinPattern, optional
+    }
+
+    public init(bundleID: String, titleHash: String?, frame: NormalizedFrame,
                 zIndex: Int, pinPattern: String?, optional: Bool) {
-        self.bundleID = bundleID; self.title = title; self.frame = frame
+        self.bundleID = bundleID; self.titleHash = titleHash; self.frame = frame
         self.zIndex = zIndex; self.pinPattern = pinPattern; self.optional = optional
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        bundleID = try container.decode(String.self, forKey: .bundleID)
+        titleHash = try container.decodeIfPresent(String.self, forKey: .titleHash)
+        frame = try container.decode(NormalizedFrame.self, forKey: .frame)
+        zIndex = try container.decode(Int.self, forKey: .zIndex)
+        pinPattern = try container.decodeIfPresent(String.self, forKey: .pinPattern)
+        optional = try container.decode(Bool.self, forKey: .optional)
     }
 }
 

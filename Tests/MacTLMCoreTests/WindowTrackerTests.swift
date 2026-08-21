@@ -78,7 +78,7 @@ final class WindowTrackerTests: XCTestCase {
         ]
         var seeded = ConfigurationRecords()
         seeded.apps["arc"] = [
-            WindowRecord(slot: 0, title: "Old",
+            WindowRecord(slot: 0, titleHash: testHash("Old"),
                          frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9),
                          pinPattern: "Work", lastSeen: Date(timeIntervalSince1970: 0)),
         ]
@@ -91,10 +91,10 @@ final class WindowTrackerTests: XCTestCase {
     func testPinFollowsWindowWhenZOrderChanges() {
         var seeded = ConfigurationRecords()
         seeded.apps["arc"] = [
-            WindowRecord(slot: 0, title: "Work — Arc",
+            WindowRecord(slot: 0, titleHash: testHash("Work — Arc"),
                          frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9),
                          pinPattern: "Work", lastSeen: Date(timeIntervalSince1970: 0)),
-            WindowRecord(slot: 1, title: "Personal",
+            WindowRecord(slot: 1, titleHash: testHash("Personal"),
                          frame: NormalizedFrame(x: 0.5, y: 0, w: 0.25, h: 0.9),
                          pinPattern: nil, lastSeen: Date(timeIntervalSince1970: 0)),
         ]
@@ -113,7 +113,7 @@ final class WindowTrackerTests: XCTestCase {
     func testUnmatchedPinFallsBackToSlot() {
         var seeded = ConfigurationRecords()
         seeded.apps["arc"] = [
-            WindowRecord(slot: 0, title: "Old",
+            WindowRecord(slot: 0, titleHash: testHash("Old"),
                          frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9),
                          pinPattern: "Work", lastSeen: Date(timeIntervalSince1970: 0)),
         ]

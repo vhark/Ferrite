@@ -23,7 +23,7 @@ final class RestoreEngineTests: XCTestCase {
     let area = CGRect(x: 0, y: 25, width: 1600, height: 975)
 
     private func record(slot: Int, title: String, frame: NormalizedFrame) -> WindowRecord {
-        WindowRecord(slot: slot, title: title, frame: frame,
+        WindowRecord(slot: slot, titleHash: testHash(title), frame: frame,
                      pinPattern: nil, lastSeen: Date(timeIntervalSince1970: 0))
     }
 
@@ -113,7 +113,7 @@ final class RestoreEngineTests: XCTestCase {
         XCTAssertTrue(driver.setFrameCalls.isEmpty, "transient window must not be placed")
     }
 
-    func testFewerWindowsButTitleMatchStillPlaces() {
+    func testFewerWindowsButHashMatchStillPlaces() {
         let driver = FakeDriver()
         driver.windowsByBundle["app"] = [
             DriverWindow(id: 1, title: "beta.txt", frame: CGRect(x: 0, y: 25, width: 300, height: 300)),

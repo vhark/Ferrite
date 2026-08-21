@@ -24,6 +24,7 @@ final class MacWindowDriver: WindowDriving {
                 ids.append(window.stableID)
                 result.append(DriverWindow(id: window.stableID,
                                            title: window.title,
+                                           titleHash: nil,
                                            frame: frame))
             }
         }

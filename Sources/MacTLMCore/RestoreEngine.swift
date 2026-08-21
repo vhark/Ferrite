@@ -20,7 +20,8 @@ public final class RestoreEngine {
         guard !records.isEmpty else { return 0 }
         let windows = driver.windows(ofBundleID: bundleID)
         let candidates = windows.enumerated().map { index, window in
-            WindowCandidate(id: window.id, title: window.title, order: index)
+            WindowCandidate(id: window.id, title: window.title,
+                            titleHash: window.titleHash, order: index)
         }
         // Order fallback is only safe when the app produced at least as many
         // windows as we expect. A relaunched app showing fewer (e.g. a document

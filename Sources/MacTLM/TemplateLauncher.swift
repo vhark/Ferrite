@@ -192,7 +192,8 @@ final class TemplateLauncher {
             guard !records.isEmpty else { continue }
             let windows = driver.windows(ofBundleID: bundleID)
             let candidates = windows.enumerated().map { index, window in
-                WindowCandidate(id: window.id, title: window.title, order: index)
+                WindowCandidate(id: window.id, title: window.title,
+                                titleHash: window.titleHash, order: index)
             }
             // Same count gate as placement, so raise order matches what was placed.
             let assignment = WindowMatcher.assign(

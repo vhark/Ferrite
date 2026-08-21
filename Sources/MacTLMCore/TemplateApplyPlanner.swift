@@ -19,7 +19,7 @@ public enum TemplateApplyPlanner {
         public let targetRect: CGRect
         public let normalizedFrame: NormalizedFrame
         public let zIndex: Int
-        public let title: String
+        public let titleHash: String?
         public let pinPattern: String?
     }
 
@@ -43,7 +43,7 @@ public enum TemplateApplyPlanner {
             placements.filter { $0.bundleID == bundleID }
                 .enumerated()
                 .map { slot, placement in
-                    WindowRecord(slot: slot, title: placement.title,
+                    WindowRecord(slot: slot, titleHash: placement.titleHash,
                                  frame: placement.normalizedFrame,
                                  pinPattern: placement.pinPattern,
                                  lastSeen: Date(timeIntervalSince1970: 0))
@@ -85,7 +85,7 @@ public enum TemplateApplyPlanner {
                                         targetRect: entry.frame.rect(in: target.visibleArea),
                                         normalizedFrame: entry.frame,
                                         zIndex: entry.zIndex,
-                                        title: entry.title,
+                                        titleHash: entry.titleHash,
                                         pinPattern: entry.pinPattern))
         }
 

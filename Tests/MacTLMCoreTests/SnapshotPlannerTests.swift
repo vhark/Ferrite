@@ -13,6 +13,7 @@ final class SnapshotPlannerTests: XCTestCase {
                         w: CGFloat = 400, h: CGFloat = 300, z: Int,
                         title: String = "") -> SnapshotPlanner.Window {
         SnapshotPlanner.Window(bundleID: bundleID, title: title,
+                               titleHash: testHash(title),
                                frame: CGRect(x: x, y: y, width: w, height: h), zIndex: z)
     }
 

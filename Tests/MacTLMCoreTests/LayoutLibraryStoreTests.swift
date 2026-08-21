@@ -23,10 +23,10 @@ final class LayoutLibraryStoreTests: XCTestCase {
                                         width: 1600, height: 1000, scale: 2.0),
             stageMode: .leaveOthers,
             entries: [
-                LayoutEntry(bundleID: "company.thebrowser.Browser", title: "Work",
+                LayoutEntry(bundleID: "company.thebrowser.Browser", titleHash: "h:Work",
                             frame: NormalizedFrame(x: 0.22, y: 0.05, w: 0.25, h: 0.90),
                             zIndex: 1, pinPattern: nil, optional: false),
-                LayoutEntry(bundleID: "sh.paseo.desktop", title: "Paseo",
+                LayoutEntry(bundleID: "sh.paseo.desktop", titleHash: "h:Paseo",
                             frame: NormalizedFrame(x: 0.48, y: 0.20, w: 0.25, h: 0.60),
                             zIndex: 0, pinPattern: nil, optional: true),
             ],
@@ -54,7 +54,7 @@ final class LayoutLibraryStoreTests: XCTestCase {
         var resnapshot = sampleLayout()
         resnapshot.id = UUID(uuidString: "BBBBBBBB-0000-0000-0000-000000000002")!
         resnapshot.entries = [
-            LayoutEntry(bundleID: "company.thebrowser.Browser", title: "Work",
+            LayoutEntry(bundleID: "company.thebrowser.Browser", titleHash: "h:Work",
                         frame: NormalizedFrame(x: 0, y: 0, w: 1, h: 1),
                         zIndex: 0, pinPattern: nil, optional: false),
         ]

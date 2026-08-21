@@ -163,7 +163,8 @@ private struct LayoutEntryRow: View {
             Text(PersistenceCoordinator.localizedAppName(forBundleID: entry.bundleID))
                 .lineLimit(1)
                 .frame(width: 140, alignment: .leading)
-            Text(entry.title.isEmpty ? "(untitled)" : entry.title)
+            // Entries carry only an opaque identity hash, never readable text.
+            Text("Window \(index + 1)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

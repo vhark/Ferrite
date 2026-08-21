@@ -7,11 +7,15 @@ import CoreGraphics
 public enum SnapshotPlanner {
     public struct Window {
         public let bundleID: String
+        /// Live title, in-memory only: pin matching during capture, never stored.
         public let title: String
+        public let titleHash: String?
         public let frame: CGRect   // CG space
         public let zIndex: Int     // global, 0 = frontmost
-        public init(bundleID: String, title: String, frame: CGRect, zIndex: Int) {
+        public init(bundleID: String, title: String, titleHash: String?,
+                    frame: CGRect, zIndex: Int) {
             self.bundleID = bundleID; self.title = title
+            self.titleHash = titleHash
             self.frame = frame; self.zIndex = zIndex
         }
     }
@@ -40,7 +44,7 @@ public enum SnapshotPlanner {
             let ordered = assigned.sorted { $0.zIndex < $1.zIndex }
             let entries = ordered.enumerated().map { index, window in
                 LayoutEntry(bundleID: window.bundleID,
-                            title: window.title,
+                            titleHash: window.titleHash,
                             frame: NormalizedFrame(windowFrame: window.frame,
                                                    visibleArea: display.visibleArea),
                             zIndex: index,

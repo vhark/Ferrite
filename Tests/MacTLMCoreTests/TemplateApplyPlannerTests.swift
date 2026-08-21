@@ -18,8 +18,8 @@ final class TemplateApplyPlannerTests: XCTestCase {
     }
 
     private func entry(_ bundleID: String, optional: Bool = false,
-                       z: Int = 0, title: String = "") -> LayoutEntry {
-        LayoutEntry(bundleID: bundleID, title: title,
+                       z: Int = 0, hash: String? = nil) -> LayoutEntry {
+        LayoutEntry(bundleID: bundleID, titleHash: hash,
                     frame: NormalizedFrame(x: 0.25, y: 0.0, w: 0.5, h: 0.9),
                     zIndex: z, pinPattern: nil, optional: optional)
     }
@@ -78,12 +78,12 @@ final class TemplateApplyPlannerTests: XCTestCase {
         XCTAssertEqual(plan.placements.count, 2)
     }
 
-    func testMatchingRecordsCarrySlotTitlePin() {
+    func testMatchingRecordsCarrySlotHashPin() {
         let entries = [
-            LayoutEntry(bundleID: "arc", title: "Work",
+            LayoutEntry(bundleID: "arc", titleHash: "hash-work",
                         frame: NormalizedFrame(x: 0, y: 0, w: 0.25, h: 0.9),
                         zIndex: 0, pinPattern: "Work", optional: false),
-            LayoutEntry(bundleID: "arc", title: "Personal",
+            LayoutEntry(bundleID: "arc", titleHash: "hash-personal",
                         frame: NormalizedFrame(x: 0.5, y: 0, w: 0.25, h: 0.9),
                         zIndex: 1, pinPattern: nil, optional: false),
         ]
@@ -93,9 +93,9 @@ final class TemplateApplyPlannerTests: XCTestCase {
         let records = plan.matchingRecords(forBundleID: "arc")
         XCTAssertEqual(records.count, 2)
         XCTAssertEqual(records[0].slot, 0)
-        XCTAssertEqual(records[0].title, "Work")
+        XCTAssertEqual(records[0].titleHash, "hash-work")
         XCTAssertEqual(records[0].pinPattern, "Work")
-        XCTAssertEqual(records[1].title, "Personal")
+        XCTAssertEqual(records[1].titleHash, "hash-personal")
     }
 
     func testMatchingRecordsCarryRealNormalizedFrames() {

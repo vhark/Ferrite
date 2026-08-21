@@ -4,13 +4,19 @@ import CoreGraphics
 #endif
 
 /// A window as reported by a platform driver. Frames are CG space (top-left).
+///
+/// `title` is live: pin matching and UI display, in-memory only. `titleHash` is
+/// the opaque identity the app layer computed for it, and the only one of the
+/// two that may ever reach disk.
 public struct DriverWindow: Equatable {
     public let id: Int       // stable for a window's lifetime
     public let title: String
+    public let titleHash: String?
     public let frame: CGRect
 
-    public init(id: Int, title: String, frame: CGRect) {
-        self.id = id; self.title = title; self.frame = frame
+    public init(id: Int, title: String, titleHash: String?, frame: CGRect) {
+        self.id = id; self.title = title
+        self.titleHash = titleHash; self.frame = frame
     }
 }
 
