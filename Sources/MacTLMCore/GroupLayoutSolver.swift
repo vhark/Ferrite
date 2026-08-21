@@ -164,12 +164,70 @@ public enum GroupLayoutSolver {
             .merging(partition(tail, in: tailBounds)) { first, _ in first }
     }
 
-    // TEMPORARY (Task 2 only): bias-aware placement lands in Task 3; until then
-    // the treemap is the unbiased weight-proportional partition.
+    /// The heaviest tile becomes a full-height band anchored per `bias`; the
+    /// remaining tiles are dealt alternately into the leftover space so the
+    /// two sides stay close in weight, then partitioned within it.
     private static func treemap(_ tiles: [Tile], in bounds: CGRect,
                                bias: TreemapBias) -> [Int: CGRect] {
-        _ = bias
-        return partition(tiles, in: bounds)
+        let ordered = tiles.sorted { lhs, rhs in
+            lhs.weight == rhs.weight ? lhs.id < rhs.id : lhs.weight > rhs.weight
+        }
+        guard let heaviest = ordered.first else { return [:] }
+        let rest = Array(ordered.dropFirst())
+        guard !rest.isEmpty else { return [heaviest.id: bounds] }
+
+        let total = ordered.reduce(0.0) { $0 + $1.weight }
+        let bandWidth = bounds.width * CGFloat(heaviest.weight / total)
+
+        switch bias {
+        case .left:
+            let band = CGRect(x: bounds.minX, y: bounds.minY,
+                              width: bandWidth, height: bounds.height)
+            let remainder = CGRect(x: band.maxX, y: bounds.minY,
+                                   width: bounds.width - bandWidth,
+                                   height: bounds.height)
+            return partition(rest, in: remainder)
+                .merging([heaviest.id: band]) { first, _ in first }
+        case .right:
+            let band = CGRect(x: bounds.maxX - bandWidth, y: bounds.minY,
+                              width: bandWidth, height: bounds.height)
+            let remainder = CGRect(x: bounds.minX, y: bounds.minY,
+                                   width: bounds.width - bandWidth,
+                                   height: bounds.height)
+            return partition(rest, in: remainder)
+                .merging([heaviest.id: band]) { first, _ in first }
+        case .center:
+            // Deal heaviest-first alternately so both sides carry similar weight.
+            var leftTiles: [Tile] = []
+            var rightTiles: [Tile] = []
+            for (index, tile) in rest.enumerated() {
+                if index.isMultiple(of: 2) { leftTiles.append(tile) }
+                else { rightTiles.append(tile) }
+            }
+            let leftWeight = leftTiles.reduce(0.0) { $0 + $1.weight }
+            let rightWeight = rightTiles.reduce(0.0) { $0 + $1.weight }
+            let sideWidth = bounds.width - bandWidth
+            let leftShare = (leftWeight + rightWeight) > 0
+                ? CGFloat(leftWeight / (leftWeight + rightWeight)) : 0.5
+            let leftWidth = sideWidth * leftShare
+            var result: [Int: CGRect] = [:]
+            if !leftTiles.isEmpty {
+                result.merge(partition(leftTiles,
+                                       in: CGRect(x: bounds.minX, y: bounds.minY,
+                                                  width: leftWidth,
+                                                  height: bounds.height))) { a, _ in a }
+            }
+            result[heaviest.id] = CGRect(x: bounds.minX + leftWidth, y: bounds.minY,
+                                         width: bandWidth, height: bounds.height)
+            if !rightTiles.isEmpty {
+                result.merge(partition(rightTiles,
+                                       in: CGRect(x: bounds.minX + leftWidth + bandWidth,
+                                                  y: bounds.minY,
+                                                  width: sideWidth - leftWidth,
+                                                  height: bounds.height))) { a, _ in a }
+            }
+            return result
+        }
     }
 
     // MARK: - Gap
