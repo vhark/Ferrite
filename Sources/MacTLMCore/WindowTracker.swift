@@ -3,9 +3,13 @@ import Foundation
 import CoreGraphics
 #endif
 
-/// Capture side of persistence: snapshots an app's windows into records on
-/// activity, persists debounced, flushes on app termination.
+/// Capture side of persistence: merges an app's open windows into its records
+/// on activity, persists debounced, flushes on app termination.
 public final class WindowTracker {
+    /// Ceiling on remembered windows per app. Records survive their windows
+    /// now, so without one a document app would grow its list forever.
+    static let maxRecordsPerApp = 16
+
     private let driver: WindowDriving
     private let store: LayoutStore
     private let configKey: () -> String
@@ -122,46 +126,77 @@ public final class WindowTracker {
         records = store.loadPurgingLegacyTitles(configKey: loadedKey)
     }
 
+    /// Merges the open windows into what is already remembered.
+    ///
+    /// Replacing the app's records with only the windows open at this instant
+    /// silently destroyed the remembered frames of every window that was not
+    /// open yet — and worse, once the counts lined up again the order fallback
+    /// was allowed and the next window to appear was dragged into a slot that
+    /// belonged to another. Any app whose windows appear more than a settle
+    /// apart hit it, as did any user reopening documents one at a time.
     private func capture(bundleID: String) {
         let windows = driver.windows(ofBundleID: bundleID)
         guard !windows.isEmpty else { return } // keep last-known on close-all
         let area = visibleArea()
         guard area.width > 0, area.height > 0 else { return }
         let existing = records.apps[bundleID] ?? []
-        let pins = assignPins(existing: existing, windows: windows)
-        records.apps[bundleID] = windows.enumerated().map { index, window in
-            WindowRecord(slot: index,
-                         titleHash: window.titleHash,
-                         frame: NormalizedFrame(windowFrame: window.frame, visibleArea: area),
-                         pinPattern: pins[index],
-                         lastSeen: Date())
-        }
-    }
 
-    /// Pins follow their window: each pin re-attaches to the first captured
-    /// window whose title matches its pattern; unmatched (or invalid/empty)
-    /// pins fall back to their original slot.
-    private func assignPins(existing: [WindowRecord], windows: [DriverWindow]) -> [Int: String] {
-        var result: [Int: String] = [:]
-        var unmatched: [(slot: Int, pattern: String)] = []
-        var taken = Set<Int>()
-        for record in existing {
-            guard let pattern = record.pinPattern else { continue }
-            if !pattern.isEmpty,
-               let index = windows.indices.first(where: { candidate in
-                   !taken.contains(candidate) && windows[candidate].title.range(
-                       of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
-               }) {
-                result[index] = pattern
-                taken.insert(index)
+        // One identity-resolution path: `WindowMatcher` pairs live windows with
+        // records here exactly as it does for restore — pins, then identity
+        // hashes, then order — so capture and restore can never disagree about
+        // which record belongs to which window. The order fallback is gated the
+        // same way `RestoreEngine` gates it: with fewer live windows than
+        // records, the missing ones are simply not open, and pairing the
+        // survivors by z-order would overwrite the wrong record's frame.
+        let candidates = windows.enumerated().map { index, window in
+            WindowCandidate(id: window.id, title: window.title,
+                            titleHash: window.titleHash, order: index)
+        }
+        let assignment = WindowMatcher.assign(
+            records: existing, to: candidates,
+            allowOrderFallback: windows.count >= existing.count)
+
+        let now = Date()
+        var merged = existing
+        var seen = Set<Int>() // slots this capture touched; never evictable
+        var nextSlot = (existing.map(\.slot).max() ?? -1) + 1
+        for window in windows {
+            let frame = NormalizedFrame(windowFrame: window.frame, visibleArea: area)
+            if let matched = assignment[window.id],
+               let index = merged.firstIndex(where: { $0.slot == matched.slot }) {
+                // Slot and pin are the record's identity; only what the window
+                // currently looks like is refreshed.
+                merged[index].frame = frame
+                merged[index].titleHash = window.titleHash
+                merged[index].lastSeen = now
+                seen.insert(matched.slot)
             } else {
-                unmatched.append((record.slot, pattern))
+                merged.append(WindowRecord(slot: nextSlot, titleHash: window.titleHash,
+                                           frame: frame, pinPattern: nil, lastSeen: now))
+                seen.insert(nextSlot)
+                nextSlot += 1
             }
         }
-        for (slot, pattern) in unmatched where slot < windows.count && result[slot] == nil {
-            result[slot] = pattern
-        }
-        return result
+        records.apps[bundleID] = evictingOverflow(from: merged, keeping: seen)
+            .sorted { $0.slot < $1.slot }
+    }
+
+    /// Records now outlive the windows they describe, so the list needs a
+    /// ceiling: an app churning through documents would otherwise accumulate
+    /// them forever. The stalest go first, and only ever the stale — a pinned
+    /// record was asked for by name, and one seen in this capture is open right
+    /// now. If that leaves nothing evictable the cap yields; correctness of the
+    /// remembered set outranks its size.
+    private func evictingOverflow(from merged: [WindowRecord],
+                                  keeping seen: Set<Int>) -> [WindowRecord] {
+        let overflow = merged.count - Self.maxRecordsPerApp
+        guard overflow > 0 else { return merged }
+        let doomed = Set(merged
+            .filter { $0.pinPattern == nil && !seen.contains($0.slot) }
+            .sorted { $0.lastSeen < $1.lastSeen }
+            .prefix(overflow)
+            .map(\.slot))
+        return merged.filter { !doomed.contains($0.slot) }
     }
 
     private func persist() {

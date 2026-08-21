@@ -88,6 +88,10 @@ final class WindowTrackerTests: XCTestCase {
         XCTAssertEqual(tracker.recordsFor(bundleID: "arc")[0].pinPattern, "Work")
     }
 
+    /// The pin stays on its own record and that record follows the window whose
+    /// title matches, whatever the z-order. Asserted through the frames, not
+    /// array positions: capture merges, so a record's slot is its identity and
+    /// no longer shuffles to match the enumeration order.
     func testPinFollowsWindowWhenZOrderChanges() {
         var seeded = ConfigurationRecords()
         seeded.apps["arc"] = [
@@ -99,6 +103,7 @@ final class WindowTrackerTests: XCTestCase {
                          pinPattern: nil, lastSeen: Date(timeIntervalSince1970: 0)),
         ]
         try? store.save(seeded, configKey: "test-config")
+        // "Work — Arc" is now behind "Personal".
         driver.windowsByBundle["arc"] = [
             DriverWindow(id: 10, title: "Personal", frame: CGRect(x: 0, y: 25, width: 400, height: 900)),
             DriverWindow(id: 11, title: "Work — Arc", frame: CGRect(x: 400, y: 25, width: 400, height: 900)),
@@ -106,8 +111,14 @@ final class WindowTrackerTests: XCTestCase {
         let tracker = makeTracker()
         tracker.noteActivity(bundleID: "arc")
         let records = tracker.recordsFor(bundleID: "arc")
-        XCTAssertNil(records[0].pinPattern)
-        XCTAssertEqual(records[1].pinPattern, "Work")
+        XCTAssertEqual(records.count, 2)
+        let pinned = records.first { $0.pinPattern == "Work" }
+        XCTAssertEqual(pinned?.slot, 0, "the pin never migrates to another slot")
+        XCTAssertEqual(pinned?.frame.x ?? -1, 0.25, accuracy: 0.001,
+                       "the pinned record captured the window titled 'Work — Arc'")
+        let unpinned = records.first { $0.pinPattern == nil }
+        XCTAssertEqual(unpinned?.frame.x ?? -1, 0.0, accuracy: 0.001,
+                       "the frontmost window went to its own record, not the pinned one")
     }
 
     func testUnmatchedPinFallsBackToSlot() {
