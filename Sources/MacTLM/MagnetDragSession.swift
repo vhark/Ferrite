@@ -39,7 +39,8 @@ final class MagnetDragSession {
         guard !isSelfInflicted(event) else { return }
         switch event.kind {
         case .moved: handleMoved(event)
-        case .created, .resized, .titleChanged: break
+        case .resized: handleResized(event)
+        case .created, .titleChanged: break
         }
     }
 
@@ -168,6 +169,63 @@ final class MagnetDragSession {
     private func logUnresolved(bundleID: String, windowID: Int) {
         NSLog("MacTLM: snapped windows but did not remember the group — no record "
               + "certainly identifies %@ window %d", bundleID, windowID)
+    }
+
+    // MARK: - Resize propagation
+
+    private func handleResized(_ event: AppObserver.WindowEvent) {
+        // The gesture is a resize, not a move: a drag opened by the moved
+        // events a resize also emits must not snap the window on release.
+        if drag?.windowID == event.windowID { endDrag() }
+
+        // Cheapest question first: with no groups remembered there is nothing
+        // to propagate to, and resolving identity would cost an AX sweep of
+        // the app for every event of a resize the user is still dragging.
+        let groups = coordinator.magnetGroups()
+        guard !groups.isEmpty,
+              let previous = monitor.lastKnownFrame(ofWindow: event.windowID),
+              let slot = coordinator.slot(forWindowID: event.windowID,
+                                          bundleID: event.bundleID),
+              let group = groups.first(where: {
+                  $0.contains(bundleID: event.bundleID, slot: slot)
+              })
+        else { return }
+
+        let live = coordinator.liveMembers(of: group)
+        var frames = Dictionary(live.map { ($0.window.id, $0.window.frame) },
+                                uniquingKeysWith: { first, _ in first })
+        // The driver's enumeration can trail the notification by a frame.
+        frames[event.windowID] = event.frame
+        guard frames.count > 1 else { return }
+
+        let moves = MagnetResize.propagate(frames: frames,
+                                           changed: event.windowID,
+                                           previous: previous,
+                                           mode: group.resizeMode,
+                                           gap: Self.gap)
+        guard !moves.isEmpty else { return }
+        for member in backToFront(live.filter { moves[$0.window.id] != nil }) {
+            guard let frame = moves[member.window.id] else { continue }
+            write(frame, to: member.window, bundleID: member.member.bundleID)
+        }
+    }
+
+    /// Deepest first, so a `setFrame` that raises its window cannot leave the
+    /// group's stacking inverted. The CG sweep is skipped for a single window,
+    /// which is the common case — shrink touches one mate.
+    private func backToFront(
+        _ members: [PersistenceCoordinator.LiveMember]
+    ) -> [PersistenceCoordinator.LiveMember] {
+        guard members.count > 1 else { return members }
+        let order = ZOrderMatcher.zIndices(
+            axWindows: members.map {
+                ZOrderMatcher.AXRef(id: $0.window.id, pid: $0.window.pid,
+                                    frame: $0.window.frame)
+            },
+            cgFrontToBack: ZOrderCapture.frontToBack())
+        return members.sorted {
+            (order[$0.window.id] ?? .max) > (order[$1.window.id] ?? .max)
+        }
     }
 
     // MARK: - Writing frames

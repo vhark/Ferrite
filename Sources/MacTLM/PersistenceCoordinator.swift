@@ -191,6 +191,12 @@ final class PersistenceCoordinator {
 
     // MARK: - Magnet groups
 
+    /// A group member paired with the window it currently resolves to.
+    struct LiveMember {
+        let member: MagnetMember
+        let window: DriverWindow
+    }
+
     /// The magnet groups remembered for the display configuration in use now.
     func magnetGroups() -> [MagnetGroup] {
         tracker.magnetGroups
@@ -242,6 +248,26 @@ final class PersistenceCoordinator {
         return WindowMatcher.assign(records: records,
                                     to: Self.windowCandidates(windows),
                                     allowOrderFallback: false)[windowID]?.slot
+    }
+
+    /// The members of `group` with a window open right now, resolved the same
+    /// certain-identity way as `slot(forWindowID:bundleID:)`.
+    func liveMembers(of group: MagnetGroup) -> [LiveMember] {
+        var result: [LiveMember] = []
+        for (bundleID, members) in Dictionary(grouping: group.members, by: \.bundleID) {
+            let records = tracker.recordsFor(bundleID: bundleID)
+            let windows = driver.windows(ofBundleID: bundleID)
+            guard !records.isEmpty, !windows.isEmpty else { continue }
+            let assignment = WindowMatcher.assign(records: records,
+                                                  to: Self.windowCandidates(windows),
+                                                  allowOrderFallback: false)
+            for window in windows {
+                guard let slot = assignment[window.id]?.slot,
+                      let member = members.first(where: { $0.slot == slot }) else { continue }
+                result.append(LiveMember(member: member, window: window))
+            }
+        }
+        return result
     }
 
     private static func windowCandidates(_ windows: [DriverWindow]) -> [WindowCandidate] {
