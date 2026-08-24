@@ -91,6 +91,21 @@ No unit tests — mouse-driven session behavior has no headless surface; Task 3'
 
 ---
 
+## Task 4 (amendment, added after live feedback): Ghost-outline carry
+
+**Why:** Live acceptance confirmed the gesture but reported follower lag. Root cause: each follower update is a synchronous AX write into the target app's main thread, all sequential per moved event — one busy member (Illustrator) stalls every tick. macOS offers no API to freeze another app's rendering, so the honest equivalent of the user's "don't render contents until movement stops" is ghost outlines: zero mid-drag IPC, one real write per follower at release.
+
+**Files:** create `Sources/MacTLM/MagnetGhostOverlay.swift`; modify `Sources/MacTLM/MagnetDragSession.swift`.
+
+- [ ] **Step 1 — ghost overlay.** `MagnetGhostOverlay` manages one borderless, non-activating panel per follower (same panel recipe as `MagnetSnapOverlay`: clear, `ignoresMouseEvents`, `.floating`, `[.canJoinAllSpaces, .stationary]`). Each draws a rounded outline (2pt `controlAccentColor` stroke, ~10% alpha fill, 8pt corner radius). API: `show(frames: [CGRect])` (CG space; convert via `ScreenGeometry.nsRect(fromCG:)` — never re-derive the flip), `translate(to delta: CGVector)` repositioning every panel from its shown origin by the delta (absolute-from-start, no drift), `hide()`. Panels move with `setFrameOrigin` — window-server ops, no IPC.
+- [ ] **Step 2 — cluster session rewiring.** At cluster-session open: show ghosts at the followers' start frames, record the base mouse location (`NSEvent.mouseLocation`), and install a global `.leftMouseDragged` monitor driving `ghosts.translate(to:)` from the mouse delta (Cocoa space end-to-end for ghosts — same-space deltas need no conversion; only frames cross spaces). Delete the per-moved-event follower `write()` loop; AX moved events in cluster mode now only update `lastFrame`.
+- [ ] **Step 3 — release settle.** In `finishDrag` for cluster sessions: hide ghosts, remove both monitors, read the dragged window's released frame from the driver (source of truth — includes any OS clamping the mouse math would miss), delta = released.origin − draggedStart.origin, write each follower `start + delta` once through the existing suppressed `write()`. Trace `"cluster settle followers=<n> delta=<dx>,<dy>"`.
+- [ ] **Step 4 — teardown.** The dragged monitor and ghosts are also torn down in `endDrag()` and `deinit` — a stuck ghost is worse than no ghost (same rule as the snap overlay).
+- [ ] **Step 5** Verify: `swift build` clean; `swift test` 205/0; `./scripts/make-app.sh` green; app never launched.
+- [ ] **Step 6: Commit** — `feat: ghost-outline cluster carry; followers settle once on release`
+
+---
+
 ## Task 3: Live acceptance and tag (human-driven; do not attempt from an agent)
 
 - [ ] **Step 1** `./scripts/install.sh`; daemon running, login item enabled.
