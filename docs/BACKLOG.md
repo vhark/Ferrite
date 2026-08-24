@@ -1,4 +1,4 @@
-# MacTLM — Backlog and Platform Findings
+# Ferrite — Backlog and Platform Findings
 
 > Renamed MacTLM → Ferrite at v0.11.0; historical text below keeps the old name.
 
@@ -20,10 +20,11 @@ Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpower
 | `v0.8.0-m3c` | Proportional group scale | A magnet group resizes like one combined window: dragging an outer edge scales the group along that axis on release, an outer corner scales both; per-axis settle composes with live Shrink/Nudge instead of undoing it; `MagnetScale` in Core with classification and remap; moved-twin fix resurrects live propagation for origin-moving drags |
 | `v0.9.0-m3d` | Group drag | ⌘-drag any member carries the whole group: followers stop, accent ghost outlines glide at mouse rate, one real write per follower at release; plain drag-away now truly removes membership (dissolve below two), and un-mate-before-mate moves a window A→B instead of unioning groups; `MagnetScale.isAdjacent` shared by all membership decisions |
 | `v0.10.0-m2e` | Merged placement | An app with windows on several displays gets exactly one window assignment per bundle launch: `MultiApplyPlanner` merges placements with globally unique slots and absolute target rects; `WindowMatcher.Affinity` steers order fallback by each window's current display while pin/hash identity still outranks geometry; `activateAndRaise` and the launched-app settle path consume the same assignment |
+| `v0.11.0-ferrite` | Rename to Ferrite | Platform-neutral name for the Linux (and maybe Windows) future: bundle `dev.ferrite.Ferrite`, targets `Ferrite`/`FerriteCore`, `FERRITE_TRACE_DRAG`, signing identity "Ferrite Dev"; one-shot `LegacyMigration` carries the salt verbatim plus layouts, records, groups, exclude list, and hotkeys, copy-never-delete with the MacTLM state left as rollback |
 
 **PRD §9 acceptance: PASSED** live on 2026-08-19 — `Design&Comms` restored from a cold start (Illustrator, both Arcs, Paseo, Nextcloud Talk, Finder, Spotify, Obsidian, Rambox), apps relaunching into place one by one. The single defect it exposed (Illustrator covering the layout) is fixed in `v0.2.1-m2a` and re-verified.
 
-Test suite: 213 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
+Test suite: 220 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
 
 **Multi-display validated 2026-08-20** — a second display (laptop built-in alongside the ultrawide) made the bundle path testable for the first time. `--apply-bundle` placed both laptop windows pixel-exact, confirming `MultiApplyPlanner` and the per-display `visibleArea` plumbing correct.
 
@@ -38,6 +39,8 @@ Test suite: 213 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and 
 **Group drag acceptance: PASSED** live on 2026-08-24 — ⌘-cluster carry verified at slow and flick speeds after two live-driven iterations (live follower writes → ghost outlines for lag; open-time anchoring → at-rest anchor + per-event re-anchor for the flick gap); drag-away un-mate confirmed against the Groups menu. The settle lands the original mated formation from the dragged window's real released frame.
 
 **Merged placement acceptance: PASSED** live on 2026-08-24 — Arc with multiple windows on both displays, saved as a bundle, Arc quit, bundle relaunched: every window landed on its own display, which also exercises the settle-then-place path for a launched-missing app. The two-displays-one-app residual (accepted since M2b) is retired. Single-display behavior is guarded by `testNilAffinityIsByteCompatible` plus continuous daily use; the adopt-running variant (windows dragged to one display, bundle returning them home) rides the same assignment and remains covered by tests rather than a dedicated live run.
+
+**Rename acceptance: PASSED** live on 2026-08-24 — Ferrite installed over MacTLM in one `install.sh` run: old daemon stopped, unregistered and removed; salt migrated byte-for-byte (verified against the old domain's bytes); layouts, hotkeys, and magnet groups all present in the new menu; the daemon's own Accessibility grant was live within seconds (capture writes observed) with no manual TCC dance, and the stale MacTLM entry was removed by hand. Old `~/Library/Application Support/MacTLM/` and defaults domain remain as rollback.
 
 ## Pending verification
 
@@ -94,4 +97,4 @@ Test suite: 213 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and 
 
 ## Linux port (post-M2)
 
-`MacTLMCore` holds all schema, matching, planning, and solver logic with no AppKit import — that is the entire porting strategy. A Linux build needs a new `WindowDriving` implementation (sway/Hyprland IPC on Wayland, EWMH on X11). Approximately none of `Sources/MacTLM` is portable.
+`FerriteCore` holds all schema, matching, planning, and solver logic with no AppKit import — that is the entire porting strategy. A Linux build needs a new `WindowDriving` implementation (sway/Hyprland IPC on Wayland, EWMH on X11). Approximately none of `Sources/Ferrite` is portable.
