@@ -80,6 +80,15 @@ final class MagnetDragSession {
         let neighbours: [Neighbour]
         let mouseUpMonitor: Any?
         var candidate: MagnetMating.Candidate?
+        struct Cluster {
+            let draggedStart: CGRect
+            /// Fellow live members and their frames at session start.
+            let followers: [(member: PersistenceCoordinator.LiveMember, start: CGRect)]
+        }
+        let cluster: Cluster?
+        /// The dragged window's frame at the most recent moved event, for the
+        /// release-time adjacency test.
+        var lastFrame: CGRect
     }
 
     private var drag: Drag?
@@ -109,6 +118,20 @@ final class MagnetDragSession {
             openDrag(for: event)
             trace("openDrag -> session=\(drag != nil) neighbours=\(drag?.neighbours.count ?? -1)")
         }
+        drag?.lastFrame = event.frame
+        if let cluster = drag?.cluster {
+            // Absolute-from-start targets: no incremental drift, and a
+            // follower whose app rejected the last write self-heals on the
+            // next event. No mating, no overlay in cluster mode.
+            for follower in cluster.followers {
+                write(follower.start.offsetBy(
+                          dx: event.frame.minX - cluster.draggedStart.minX,
+                          dy: event.frame.minY - cluster.draggedStart.minY),
+                      to: follower.member.window,
+                      bundleID: follower.member.member.bundleID)
+            }
+            return
+        }
         updateCandidate(for: event)
         if let candidate = drag?.candidate {
             trace("candidate mate=\(candidate.mateID) \(candidate.edge) " +
@@ -137,6 +160,27 @@ final class MagnetDragSession {
                   "(\(eligible.count) eligible windows swept)")
             return
         }
+        // ⌘ is sampled once, here at session open: a modifier pressed
+        // mid-drag does not convert the session — no mid-drag mode flips,
+        // the same stance as classification-at-open.
+        var cluster: Drag.Cluster?
+        if NSEvent.modifierFlags.contains(.command),
+           let slot = coordinator.slot(forWindowID: event.windowID,
+                                       bundleID: event.bundleID),
+           let group = coordinator.magnetGroups().first(where: {
+               $0.contains(bundleID: event.bundleID, slot: slot)
+           }) {
+            let live = coordinator.liveMembers(of: group)
+            if live.count >= 2 {
+                cluster = Drag.Cluster(
+                    draggedStart: event.frame,
+                    followers: live.filter { $0.window.id != event.windowID }
+                        .map { (member: $0, start: $0.window.frame) })
+            }
+        }
+        // No preview in cluster mode — the followers moving live are the
+        // feedback. Hide defensively in case a plain session left one up.
+        if cluster != nil { overlay.hide() }
         let mouseUp = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) {
             [weak self] _ in self?.finishDrag()
         }
@@ -144,7 +188,11 @@ final class MagnetDragSession {
                     bundleID: event.bundleID,
                     neighbours: eligible.filter { $0.windowID != event.windowID },
                     mouseUpMonitor: mouseUp,
-                    candidate: nil)
+                    candidate: nil,
+                    cluster: cluster,
+                    lastFrame: event.frame)
+        trace("session mode=\(cluster == nil ? "plain" : "cluster") " +
+              "followers=\(cluster?.followers.count ?? 0)")
     }
 
     /// Recomputes the mate for the frame the dragged window is at right now and
@@ -184,10 +232,18 @@ final class MagnetDragSession {
             trace("mouse-up with no open session")
             return
         }
+        if open.cluster != nil {
+            // Cluster carry: nothing settles, no un-mate — the arrangement was
+            // preserved by construction, adjacency included.
+            trace("mouse-up: cluster session closed, nothing to settle")
+            endDrag()
+            return
+        }
         let candidate = open.candidate
         endDrag()
         guard let candidate else {
             trace("mouse-up: no mate, nothing to do")
+            unmateIfReleasedAway(open, releasedAt: open.lastFrame)
             return
         }
         guard let window = liveWindow(id: open.windowID, bundleID: open.bundleID) else {
@@ -196,7 +252,32 @@ final class MagnetDragSession {
         }
         trace("mouse-up: snapping win=\(open.windowID) to \(candidate.snapped)")
         write(candidate.snapped, to: window, bundleID: open.bundleID)
+        unmateIfReleasedAway(open, releasedAt: candidate.snapped)
         remember(open, matedTo: candidate)
+    }
+
+    /// Plain-drag release: a member released flush against no fellow live
+    /// member leaves its group. Runs BEFORE `remember(_:matedTo:)`, so a snap
+    /// onto another group's window moves the membership A→B instead of
+    /// unioning the groups. Unresolvable identity → no membership change:
+    /// geometry may move, memory only changes when identity is certain.
+    private func unmateIfReleasedAway(_ open: Drag, releasedAt released: CGRect) {
+        guard let slot = coordinator.slot(forWindowID: open.windowID,
+                                          bundleID: open.bundleID) else { return }
+        guard let group = coordinator.magnetGroups().first(where: {
+            $0.contains(bundleID: open.bundleID, slot: slot)
+        }) else { return }
+        let fellows = coordinator.liveMembers(of: group)
+            .filter { $0.window.id != open.windowID }
+        // With no fellow live member there is nothing to test against, and
+        // removing membership on that silence would be a guess.
+        guard !fellows.isEmpty else { return }
+        let flush = fellows.contains {
+            MagnetScale.isAdjacent(released, to: $0.window.frame)
+        }
+        guard !flush else { return }
+        coordinator.unmate(bundleID: open.bundleID, slot: slot)
+        trace("unmated \(open.bundleID)#\(slot): released away from its group")
     }
 
     /// Removes the mouse-up monitor and the preview. Safe to call twice: a

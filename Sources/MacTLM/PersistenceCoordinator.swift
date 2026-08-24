@@ -241,6 +241,19 @@ final class PersistenceCoordinator {
         tracker.setMagnetGroups(remaining)
     }
 
+    /// Removes one member from whatever group holds it, dropping the group
+    /// when it dissolves below two members. No-op when no group contains the
+    /// member. Like `ungroup(_:)`, this changes what MacTLM remembers — it
+    /// does not move anything.
+    func unmate(bundleID: String, slot: Int) {
+        var groups = tracker.magnetGroups
+        guard let index = groups.firstIndex(where: {
+            $0.contains(bundleID: bundleID, slot: slot)
+        }) else { return }
+        groups[index].remove(bundleID: bundleID, slot: slot)
+        tracker.setMagnetGroups(groups.filter { !$0.isDissolved })
+    }
+
     /// The record slot a live window resolves to, or nil when its identity is
     /// not certain. The order fallback is off on purpose: group membership is
     /// written to disk, and the fallback is a guess — remembering the wrong
