@@ -1,80 +1,53 @@
-# MacTLM — Session Handoff (2026-08-19)
+# MacTLM — Session Handoff (2026-08-24, pre-rename checkpoint)
 
-State saved before a machine restart + macOS update. Working tree clean at `842ef10`.
+State saved at tag `v0.10.1` on `main`. Working tree clean. 213 unit tests, 0 failures.
 
 ## Where things stand
 
-| | |
+The **entire PRD arc is shipped and live-verified** — every milestone tagged after passing its live protocol on the user's machine, never on unit tests alone:
+
+| Tag | Milestone |
 |---|---|
-| Branch | `main`, clean, nothing uncommitted |
-| Tags | `v0.1.0-m1`, `v0.2.0-m2a`, `v0.2.1-m2a` (latest) |
-| Tests | 70 unit tests over `MacTLMCore`, all passing |
-| App | `build/MacTLM.app`, signed with the self-signed **MacTLM Dev** identity |
-| Docs | PRD `docs/superpowers/specs/2026-08-19-mactlm-prd-design.md`; plans in `docs/superpowers/plans/`; findings + backlog `docs/BACKLOG.md` |
+| `v0.1.0-m1` | Position persistence (automatic per-app capture/restore) |
+| `v0.2.0–v0.2.2-m2a` | Workspace templates, stacking correctness, install + login item |
+| `v0.3.0-m2b` | Bundles, per-bundle hotkeys, Preferences window |
+| `v0.4.0-m2c` | Apps tab, per-entry editing |
+| `v0.5.0/1-m2d` | Hashed window identity — no titles ever persisted |
+| `v0.6.0-m3a` | Preset reflow solvers + weighted treemap, evidence-based exclusions |
+| `v0.7.0-m3b` | Magnet groups: drag-to-mate, shrink/nudge resize, weights, menu |
+| `v0.8.0-m3c` | Proportional group scale (outer edge/corner, settle-on-release) |
+| `v0.9.0-m3d` | ⌘ group drag with ghost outlines; drag-away un-mate |
+| `v0.10.0-m2e` | Merged per-app placement across displays (residual retired) |
 
-Shipped and verified live: automatic window-position persistence (M1) and workspace templates with a per-monitor menu (M2a), including the full PRD §9 acceptance run.
+Daemon: `/Applications/MacTLM.app`, running, Launch-at-Login `enabled`. Accessibility grant stable (bound to the "MacTLM Dev" signing identity; its keychain ACL is permanent after an "Always Allow" — codesign is silent). Dev builds: `scripts/make-app.sh` → `build/`; daily driver: `scripts/install.sh`.
 
-## Saved user data (survives the update)
+## Rename pending (next work item)
 
-`~/Library/Application Support/MacTLM/`
-- `layouts.json` — 3 layouts, all bound to display `5836EAC1-3D33-4B6C-B122-72B55ABBB379` (Odyssey G95NC):
-  - `Design&Comms` — 9 entries, `clearStage` (the real working layout)
-  - `SmokeScene` — 10 entries, `leaveOthers` (test scaffold, delete whenever)
-  - `StageTest` — 10 entries, `clearStage` (test scaffold, delete whenever)
-- `configurations/5836EAC1-…_7680x2160@1.0.json` — per-app window records for the current display setup
-- `exclude.json` — only written once an app is excluded via the menu; defaults otherwise (After Effects, MATLAB — Illustrator was dropped 2026-08-21 after `--probe-frame` showed it accepts frame changes)
+The user wants a platform-neutral name (Linux next, maybe Windows) — "Mac" must leave the name. Decided at this checkpoint so the rename lands as its own milestone ON TOP of this tag. The rename's real costs, mapped in advance:
 
-## Install layout (as of 2026-08-20, post macOS 26.6.2 update)
+- **TCC re-grant is unavoidable.** The Accessibility grant binds to the signature's designated requirement, which includes the bundle ID (`dev.mactlm.MacTLM`). New bundle ID → one-time re-approval; stale entries must be removed, not toggled (finding 6).
+- **The identity salt MUST migrate** (`dev.mactlm.identitySalt` in the `dev.mactlm.MacTLM` defaults domain). Losing it kills every stored `titleHash` — matching would silently degrade to pins and order for all existing records (finding 14 territory).
+- **Also migrating:** `~/Library/Application Support/MacTLM/` (layouts.json, configurations/*.json, exclude.json), KeyboardShortcuts assignments (`bundle-<name>` keys, same defaults domain), login-item registration (old bundle unregistered, new registered — may show "needs approval"), old app bundle removal.
+- **Mechanical scope:** SPM targets `MacTLM`/`MacTLMCore`/`MacTLMCoreTests`, every `import MacTLMCore`, `MACTLM_TRACE_DRAG`, NSLog prefixes, scripts, docs. Repo directory rename last and optional.
 
-**Daily driver: `/Applications/MacTLM.app`** — installed via `scripts/install.sh` and registered for Launch at Login (`status: enabled`). It starts itself at login and asserts your saved frames, so you no longer depend on macOS Resume.
+## User data (all local to this machine)
 
-**Dev builds stay in `build/MacTLM.app`** via `scripts/make-app.sh`. Never register the build copy for login: `make-app.sh` deletes and recreates that bundle, and wiping `build/` would silently break the login item. `scripts/install.sh` re-runs the build, unregisters any build-dir login item, dittos the bundle to `/Applications`, re-registers from there, and relaunches.
+- `~/Library/Application Support/MacTLM/` — layouts, per-configuration records + magnet groups, exclude list. Designed to be synced (git/Nextcloud); titles are salted hashes, never plaintext.
+- `defaults dev.mactlm.MacTLM` — identity salt (32 bytes), hotkey assignments.
+- Salt deliberately OUTSIDE the synced directory; Keychain storage is a queued hardening item.
 
-Check state any time:
-```bash
-/Applications/MacTLM.app/Contents/MacOS/MacTLM --login-status
-```
+## Pending verification (needs the right moment, not work)
 
-## After a restart — startup checklist
+- **Late-arrival restacking** (`06a98d1`): a cold bundle launch where a slow app (Illustrator) takes >15s to draw its window.
+- **A→B group membership move**: first time two magnet clusters exist and a member is dragged from one onto the other.
 
-1. **It should start on its own.** If the menu-bar icon is missing, check `--login-status` above; `requiresApproval` means macOS wants you to allow MacTLM under System Settings → General → Login Items (the menu item now says "Launch at Login (needs approval)" and offers to open that pane).
+## Open backlog (all optional)
 
-2. **Accessibility permission may need re-approval after a macOS update.** Symptom: no menu-bar icon after launching.
-   ```bash
-   # is it waiting on permission? a line every ~2s means yes
-   log stream --predicate 'process == "MacTLM"' --style compact
-   ```
-   Fix: System Settings → Privacy & Security → Accessibility. If MacTLM looks enabled but still doesn't work, the TCC entry is stale — remove and re-add it, or reset and relaunch:
-   ```bash
-   tccutil reset Accessibility dev.mactlm.MacTLM
-   open /Users/vincehark/Code/MacTLM/build/MacTLM.app
-   ```
+Keychain salt · re-hash on demand for pre-M2d records · target-display picker · PRD M4 (README, Homebrew cask, notarization — the public-release bar; why this checkpoint is not v1.0.0) · Linux port (`MacTLMCore` has zero AppKit imports — that seam is the entire strategy; a Linux build needs only a new `WindowDriving` implementation).
 
-3. **The signing identity survives** — "MacTLM Dev" lives in the login keychain, so rebuilds keep the grant. Verify with `security find-identity -v -p codesigning | grep "MacTLM Dev"`. If it ever disappears, `scripts/make-app.sh` silently falls back to ad-hoc signing and the grant will break on every rebuild; regenerate per finding 6 in `docs/BACKLOG.md`.
+## How to resume
 
-4. **If the display identity changes** (new UUID, or a different resolution/scale after the update):
-   - *Persistence* starts a fresh namespace file under `configurations/`; old data is untouched and records rebuild as you use apps.
-   - *Layouts* will appear under **Inactive Monitor Layouts** in the menu and launch adapted onto the main display (proportional remap). To re-anchor them, just re-save with the same names — same-name saves replace rather than duplicate.
-
-5. **If Finder ever goes missing from captures**, restart it (`killall Finder`). The root cause is fixed in code, but a Finder process poisoned by an older build stays poisoned for its lifetime. A machine restart clears this anyway.
-
-## Quick health check
-
-```bash
-cd /Users/vincehark/Code/MacTLM
-swift test                                   # expect 70 passing
-./scripts/make-app.sh && open build/MacTLM.app
-./build/MacTLM.app/Contents/MacOS/MacTLM --list-windows | head -20
-```
-Then click a layout in the menu — windows should move to their saved frames.
-
-## Pick up here
-
-**M2b (next milestone)** — plan not yet written:
-- **Bundles** — link the per-monitor layouts from one multi-display save so a single action restores a whole multi-monitor workspace.
-- **Hotkeys** — per-layout shortcuts, completing PRD §9's "one hotkey from a clean login". Needs a recorder UI; evaluate `sindresorhus/KeyboardShortcuts` (MIT, SPM-native) since MASShortcut isn't SPM-friendly.
-- **Preferences window** — Shortcuts / Apps (exclude list, pin rules) / Layouts (rename, delete, stage mode, optional flags). Today pins and `optional` are JSON-edit-only and there's no delete affordance (`deleteLayout(id:)` exists but is unused).
-
-**One pending verification** — late-arrival restacking (`06a98d1`): when a slow app's window appears after the 15s launch deadline, it should now be pushed back to its z-position. Only reachable on a cold launch of a slow app, so the next full quit-and-relaunch of `Design&Comms` exercises it.
-
-**Process note** — the reviewer-tier subagent hit an account rate limit late in the session (retry ~2.4 days from 2026-08-19). If it's still limited, review gates need to run in the main session rather than being skipped.
+- `docs/BACKLOG.md` is authoritative: 26 platform findings paid for in blood — read before touching AX, TCC, signing, caches, or persistence.
+- Specs in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/` — every milestone has both, plans carry post-execution corrections.
+- Diagnostics: `--list-windows`, `--list-displays`, `--probe-frame <bundleID>`, `--login-status`, `--apply-bundle`; live gesture tracing via `MACTLM_TRACE_DRAG=1` (findings 22–26 were all diagnosed with it).
+- The reviewer-tier subagent rate limit encountered 2026-08-19 (~2.4-day retry) may matter if review gates are reinstated.
