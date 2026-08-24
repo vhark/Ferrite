@@ -1,0 +1,23 @@
+name: Feature request
+description: Something Ferrite should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: The workflow gap, not the mechanism — what do you keep doing by hand?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Optional sketch of how Ferrite could cover it.
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: >-
+        Out of scope by design (see the guide's *Limits and non-goals*):
+        other-Spaces management, App Store distribution, SIP-disabling hacks.

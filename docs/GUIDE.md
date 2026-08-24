@@ -173,6 +173,7 @@ Requirements: macOS 13+, Swift 5.9+ toolchain (Xcode or CLT).
 - `swift test` — 220 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
 - `./scripts/make-app.sh` — builds and signs `build/Ferrite.app` (dev builds).
 - `./scripts/install.sh` — builds, installs to `/Applications`, registers Launch at Login. Also migrates state from a previous MacTLM install (one-shot, copy-never-delete) and retires the old app.
+- `./scripts/release.sh <version>` — cuts a public release: universal binary, Developer ID signing with hardened runtime, notarization, stapling, and the Homebrew cask bump. Operator runbook: [`docs/RELEASING.md`](RELEASING.md).
 
 **Signing matters more than usual.** macOS binds the Accessibility grant to the code signature. Ad-hoc signing (`codesign -s -`) changes per build, silently killing the grant each rebuild while System Settings shows a stale enabled toggle. Create a self-signed **"Ferrite Dev"** identity once:
 

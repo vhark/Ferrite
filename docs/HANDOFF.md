@@ -28,7 +28,9 @@ Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (
 
 ## Open backlog (all optional)
 
-Keychain salt storage · re-hash on demand for pre-M2d records · target-display picker · delete the install.sh transition block after a while · PRD M4: README, Homebrew cask, notarization (the public-release bar; why no 1.0 yet) · Linux port: `FerriteCore` has zero AppKit imports, a Linux build needs only a new `WindowDriving` (sway/Hyprland IPC or EWMH).
+Keychain salt storage · re-hash on demand for pre-M2d records · target-display picker · delete the install.sh transition block after a while · Linux port: `FerriteCore` has zero AppKit imports, a Linux build needs only a new `WindowDriving` (sway/Hyprland IPC or EWMH).
+
+**PRD M4 (public release):** README, GUIDE, MIT license, issue templates, Rectangle/KeyboardShortcuts attribution, Homebrew cask (`Casks/ferrite.rb`, this repo doubles as the tap), and the full notarization pipeline (`scripts/release.sh`, runbook in `docs/RELEASING.md`) are all in place. The only remaining gate to a public 1.0 is credentials: enroll in the Apple Developer Program, install a Developer ID Application certificate, run `xcrun notarytool store-credentials ferrite-notary`, then `scripts/release.sh 1.0.0`. Dry-run verified with `--no-notarize`.
 
 ## How to resume
 

@@ -13,10 +13,17 @@ Ferrite is *not* a classic auto-tiler: windows stay free-floating and may overla
 
 ## Install
 
-No binary release yet — build from source (Swift 5.9+, macOS 13+):
+**Homebrew** — available once the first notarized release (1.0) ships:
 
 ```sh
-git clone <this repo> && cd <repo>
+brew tap vhark/ferrite https://github.com/vhark/Ferrite.git
+brew install --cask ferrite
+```
+
+**From source** (Swift 5.9+, macOS 13+):
+
+```sh
+git clone https://github.com/vhark/Ferrite.git && cd Ferrite
 ./scripts/install.sh
 ```
 
@@ -39,6 +46,11 @@ The full manual — every gesture, menu item, preference, CLI diagnostic, and tr
 ## Status
 
 macOS-first and used daily by its author. The core engine (`FerriteCore`) is pure Foundation with no AppKit dependency — the Linux port needs only a new window driver (sway/Hyprland IPC or EWMH). 220 unit tests; every feature was additionally verified by live protocol on real hardware before shipping.
+
+## Acknowledgments
+
+- [Rectangle](https://github.com/rxhanson/Rectangle) (Ryan Hanson, MIT) — the proven position→size→position AX write sequence Ferrite's window driver uses, and the original seed of the exclude list (now evidence-based via `--probe-frame`).
+- [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) (Sindre Sorhus, MIT) — global hotkey recording and registration.
 
 ## License
 

@@ -1,0 +1,40 @@
+name: Bug report
+description: Something Ferrite does wrong
+labels: [bug]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Ferrite version (menu bar icon or Info.plist) and macOS version.
+      placeholder: Ferrite 0.11.0, macOS 15.6
+    validations:
+      required: true
+  - type: input
+    id: displays
+    attributes:
+      label: Display setup
+      description: How many displays, resolutions, and whether the arrangement changed around the time of the bug.
+      placeholder: 5120x2160 ultrawide + built-in laptop display
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what Ferrite did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >-
+        For visibility/placement bugs, paste the relevant lines of
+        `/Applications/Ferrite.app/Contents/MacOS/Ferrite --list-windows`
+        (titles may be redacted). For drag/mate/resize gesture bugs, reproduce
+        once with `FERRITE_TRACE_DRAG=1` in the environment and paste the trace.
+        For an app that won't move, include the `--probe-frame <bundleID>` verdict.
+      render: text
+    validations:
+      required: false
