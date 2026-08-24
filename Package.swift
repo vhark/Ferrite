@@ -2,19 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "MacTLM",
+    name: "Ferrite",
     platforms: [.macOS(.v13)],
     dependencies: [
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.0.1"),
     ],
     targets: [
-        .target(name: "MacTLMCore"),
+        .target(name: "FerriteCore"),
         .executableTarget(
-            name: "MacTLM",
+            name: "Ferrite",
             dependencies: [
-                "MacTLMCore",
+                "FerriteCore",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ]),
-        .testTarget(name: "MacTLMCoreTests", dependencies: ["MacTLMCore"]),
+        .testTarget(name: "FerriteCoreTests", dependencies: ["FerriteCore"]),
     ]
 )

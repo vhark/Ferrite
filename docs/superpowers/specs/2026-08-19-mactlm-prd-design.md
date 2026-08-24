@@ -1,5 +1,7 @@
 # MacTLM — Product Requirements Document
 
+> Renamed MacTLM → Ferrite at v0.11.0; historical text below keeps the old name.
+
 **Date:** 2026-08-19 · **Status:** Approved design, pre-implementation · **Working title:** MacTLM (rename freely)
 
 ## 1. Product definition

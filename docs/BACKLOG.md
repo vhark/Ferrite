@@ -1,5 +1,7 @@
 # MacTLM — Backlog and Platform Findings
 
+> Renamed MacTLM → Ferrite at v0.11.0; historical text below keeps the old name.
+
 Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`.
 
 ## Shipped
