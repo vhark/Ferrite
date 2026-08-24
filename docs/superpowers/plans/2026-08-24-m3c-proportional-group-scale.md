@@ -16,7 +16,7 @@
 
 **Files:** create `Sources/MacTLMCore/MagnetScale.swift`, `Tests/MacTLMCoreTests/MagnetScaleTests.swift`.
 
-- [ ] **Step 1: Write the tests first** (11 tests)
+- [ ] **Step 1: Write the tests first** (12 tests)
 
 ```swift
 import XCTest
@@ -281,7 +281,7 @@ public enum MagnetScale {
 }
 ```
 
-- [ ] **Step 4: Run the tests, watch them pass** (expect 201 tests, 0 failures)
+- [ ] **Step 4: Run the tests, watch them pass** (expect 202 tests, 0 failures)
 - [ ] **Step 5:** Confirm Core purity: `grep -rn "import AppKit\|import CryptoKit" Sources/MacTLMCore` → empty
 - [ ] **Step 6: Commit** — `feat: proportional group scaling math for outer-edge resizes`
 
@@ -325,7 +325,7 @@ private var resize: Resize?
   - Apply back-to-front (`PersistenceCoordinator.backToFront`) through the existing `write(_:to:bundleID:)`, which already records suppression — settle echoes must not re-enter mating, propagation, or session-opening.
   - `trace("resize settle moved=… of=…")`.
 - [ ] **Step 5** `deinit` also tears down the resize monitor.
-- [ ] **Step 6** Verify: `swift build` clean; `swift test` 201/0 (Core untouched by this task); `./scripts/make-app.sh` green. Do NOT launch the app.
+- [ ] **Step 6** Verify: `swift build` clean; `swift test` 202/0 (Core untouched by this task); `./scripts/make-app.sh` green. Do NOT launch the app.
 - [ ] **Step 7: Commit** — `feat: settle outer-edge resizes by scaling the group as one window`
 
 ---
@@ -348,3 +348,4 @@ private var resize: Resize?
 - **Risk — release frames:** `lastKnownFrame` may trail the final AX event by one notification. The driver fallback bounds the error; if Task 3 shows a systematic one-event lag, read the dragged window's frame directly from the driver at mouse-up.
 - **Risk — suppression interplay:** settle writes mates *and* the just-released window. The window under the cursor is no longer gripped after mouse-up, so correcting it cannot fight the drag; its echo is suppressed like any other write.
 - **Deliberate omission:** no session persistence, no UI. A resize session is pure gesture state and dies with the process.
+- **Post-execution correction:** the original plan said "11 tests" and expected 201; the test code it contained was 12 functions, so the true totals are 12 new / 202 overall. The executing agent implemented the code verbatim and the count discrepancy was the plan label, not the suite.
