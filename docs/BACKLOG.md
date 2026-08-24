@@ -13,14 +13,17 @@ Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpower
 | `v0.3.0-m2b` | Bundles, hotkeys, Preferences | Same-name layouts across displays form a workspace bundle launched as one operation; per-bundle global hotkeys (KeyboardShortcuts 3.0.1); SwiftUI Layouts window with rename, stage toggle, hotkey recorder, and archive; archive replaces delete, permanent delete only from the archive behind a confirmation |
 | `v0.4.0-m2c` | Apps tab, entry editing | Preferences gains an Apps tab (exclude toggle, pin editing, Forget stale records) and per-entry editing in the Layouts tab; one workspace row per layout set with an explicit display submenu, replacing three identically-labelled rows; `--list-displays` and `--apply-bundle` diagnostics |
 | `v0.5.0-m2d` | Hashed window identity | Window titles are never persisted; records and layout entries carry a salted per-install `titleHash`; live titles shown in Preferences only; legacy plaintext scrubbed from every namespace at startup; pin edits fixed to reach every namespace holding the slot |
+| `v0.6.0-m3a` | Preset reflow solvers | `GroupLayoutSolver` in Core: columns, rows, grid, main+side, weight-proportional symmetric partition, and the weighted treemap with centre/left/right bias plus minimum-size clamping; menu gains a "Reflow this display" glyph row where each icon is drawn by the solver itself; exclusion defaults are now evidence-based (`--probe-frame`) and Illustrator is managed like any other app |
 
 **PRD §9 acceptance: PASSED** live on 2026-08-19 — `Design&Comms` restored from a cold start (Illustrator, both Arcs, Paseo, Nextcloud Talk, Finder, Spotify, Obsidian, Rambox), apps relaunching into place one by one. The single defect it exposed (Illustrator covering the layout) is fixed in `v0.2.1-m2a` and re-verified.
 
-Test suite: 136 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
+Test suite: 158 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
 
 **Multi-display validated 2026-08-20** — a second display (laptop built-in alongside the ultrawide) made the bundle path testable for the first time. `--apply-bundle` placed both laptop windows pixel-exact, confirming `MultiApplyPlanner` and the per-display `visibleArea` plumbing correct.
 
 **PRD §9 hotkey acceptance: PASSED** live on 2026-08-20 — one recorded hotkey (⌘⌥⌥1-style combo) restores the whole workspace, the shortcut is displayed on its menu row, and renaming the workspace migrates the shortcut with it.
+
+**PRD Phase 3 solver acceptance: PASSED** live on 2026-08-21 — the glyph row reflows the ultrawide's windows into every even preset, and the weighted treemap places the frontmost window largest with the bias controlling which side it occupies. Illustrator participates, confirming the exclude-list change. Drag-to-mate grouping and shared-edge resize remain for M3b, so today's weights come from stacking order rather than manual rank.
 
 ## Pending verification
 
