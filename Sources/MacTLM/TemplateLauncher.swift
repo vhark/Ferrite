@@ -42,6 +42,9 @@ final class TemplateLauncher {
         let multi = MultiApplyPlanner.plan(requests: requests,
                                           runningBundleIDs: running,
                                           excludedBundleIDs: excludedBundleIDs)
+        // A fresh apply owns raising: stale assignments from the previous
+        // launch must never leak into this cascade.
+        assignments = [:]
 
         if multi.stageMode == .clearStage {
             for app in NSWorkspace.shared.runningApplications
@@ -109,14 +112,41 @@ final class TemplateLauncher {
         return TemplateApplyPlanner.Target(info: main.info, visibleArea: main.visibleArea)
     }
 
-    /// Places one app's windows on every display that has placements for it.
+    /// One app's assignment from the launch's single merged match, kept so
+    /// raising consumes exactly what placement computed (windowID → slot).
+    private var assignments: [String: [Int: Int]] = [:]
+
+    /// Places one app's windows ONCE across every display in the plan: live
+    /// windows bucketed by their current display, one global assign with
+    /// affinity, absolute-rect placement. Never per display — that was the
+    /// M2b residual (cross-display claims).
     private func place(bundleID: String, multi: MultiApplyPlanner.MultiPlan) {
-        for item in multi.items {
-            let records = item.plan.matchingRecords(forBundleID: bundleID)
-            guard !records.isEmpty else { continue }
-            engine.restore(records: records, bundleID: bundleID,
-                           visibleArea: item.visibleArea)
+        guard let merged = multi.placements[bundleID], !merged.isEmpty
+        else { return } // excluded app: joins the cascade launch-only (PRD §9)
+        let windows = driver.windows(ofBundleID: bundleID)
+        let candidates = windows.enumerated().map { index, window in
+            WindowCandidate(id: window.id, title: window.title,
+                            titleHash: window.titleHash, order: index)
         }
+        let affinity = WindowMatcher.Affinity(
+            recordDisplays: merged.recordDisplays,
+            windowDisplays: WindowMatcher.Affinity.windowDisplays(
+                of: windows,
+                displays: multi.items.map { ($0.displayID, $0.visibleArea) }))
+        // The count gate is GLOBAL: the app must show at least as many windows
+        // as the whole bundle remembers before order fallback is trusted.
+        let assignment = WindowMatcher.assign(
+            records: merged.matchingRecords, to: candidates,
+            allowOrderFallback: windows.count >= merged.count,
+            affinity: affinity)
+        assignments[bundleID] = assignment.mapValues(\.slot)
+        let targetBySlot = Dictionary(uniqueKeysWithValues:
+            merged.map { ($0.slot, $0.targetRect) })
+        engine.place(assignments: windows.compactMap { window in
+            guard let slot = assignment[window.id]?.slot,
+                  let target = targetBySlot[slot] else { return nil }
+            return (window: window, target: target)
+        })
     }
 
     private func awaitedDidSettle(bundleID: String,
@@ -177,43 +207,35 @@ final class TemplateLauncher {
         }
     }
 
-    /// Brings one member app forward, then raises its own windows
-    /// backmost-first on each display so its internal order matches the layout.
+    /// Brings one member app forward, then raises its windows backmost-first
+    /// across all displays, consuming the SAME assignment placement computed —
+    /// never a second assign.
     private func activateAndRaise(bundleID: String,
                                   multi: MultiApplyPlanner.MultiPlan) {
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
         where !app.isHidden {
             app.activate(options: [])
         }
-        for item in multi.items {
-            let records = item.plan.matchingRecords(forBundleID: bundleID)
-            // Excluded app: it joins the cascade by activation alone, so we
-            // never enumerate or raise its windows (PRD §9).
-            guard !records.isEmpty else { continue }
-            let windows = driver.windows(ofBundleID: bundleID)
-            let candidates = windows.enumerated().map { index, window in
-                WindowCandidate(id: window.id, title: window.title,
-                                titleHash: window.titleHash, order: index)
-            }
-            // Same count gate as placement, so raise order matches what was placed.
-            let assignment = WindowMatcher.assign(
-                records: records, to: candidates,
-                allowOrderFallback: windows.count >= records.count)
-            let placements = item.plan.placements.filter { $0.bundleID == bundleID }
-            let backToFront = assignment
-                .map { (windowID: $0.key,
-                        zIndex: zIndex(ofSlot: $0.value.slot, in: placements)) }
-                .sorted { $0.zIndex > $1.zIndex }
-            for entry in backToFront {
-                guard let handle = driver.handle(forWindowID: entry.windowID) else { continue }
-                AXUIElementPerformAction(handle.element, kAXRaiseAction as CFString)
-            }
+        // Excluded app (no placements) or one that never placed (still
+        // launching): it joins the cascade by activation alone, so we never
+        // enumerate or raise its windows (PRD §9).
+        guard let merged = multi.placements[bundleID],
+              let assignment = assignments[bundleID] else { return }
+        let placementBySlot = Dictionary(uniqueKeysWithValues:
+            merged.map { ($0.slot, $0) })
+        // Backmost-first; equal depths keep item (display) order via the slot,
+        // matching the old per-display iteration.
+        var backToFront: [(windowID: Int, slot: Int, zIndex: Int)] = []
+        for (windowID, slot) in assignment {
+            backToFront.append((windowID: windowID, slot: slot,
+                                zIndex: placementBySlot[slot]?.zIndex ?? Int.max))
         }
-    }
-
-    /// Template zIndex for a per-bundle slot; unknown slots raise first.
-    private func zIndex(ofSlot slot: Int,
-                        in placements: [TemplateApplyPlanner.Placement]) -> Int {
-        slot < placements.count ? placements[slot].zIndex : Int.max
+        backToFront.sort { lhs, rhs in
+            lhs.zIndex == rhs.zIndex ? lhs.slot < rhs.slot : lhs.zIndex > rhs.zIndex
+        }
+        for entry in backToFront {
+            guard let handle = driver.handle(forWindowID: entry.windowID) else { continue }
+            AXUIElementPerformAction(handle.element, kAXRaiseAction as CFString)
+        }
     }
 }
