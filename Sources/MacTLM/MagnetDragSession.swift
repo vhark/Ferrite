@@ -21,6 +21,7 @@ final class MagnetDragSession {
     private let monitor: WorkspaceMonitor
     private unowned let coordinator: PersistenceCoordinator
     private let overlay = MagnetSnapOverlay()
+    private let ghosts = MagnetGhostOverlay()
 
     init(driver: MacWindowDriver, monitor: WorkspaceMonitor,
          coordinator: PersistenceCoordinator) {
@@ -84,6 +85,10 @@ final class MagnetDragSession {
             let draggedStart: CGRect
             /// Fellow live members and their frames at session start.
             let followers: [(member: PersistenceCoordinator.LiveMember, start: CGRect)]
+            /// Global `.leftMouseDragged` monitor driving the ghosts from
+            /// mouse deltas — the mouse, not AX, carries the visual, so a
+            /// busy follower app cannot stall the gesture.
+            let dragMonitor: Any?
         }
         let cluster: Cluster?
         /// The dragged window's frame at the most recent moved event, for the
@@ -119,17 +124,10 @@ final class MagnetDragSession {
             trace("openDrag -> session=\(drag != nil) neighbours=\(drag?.neighbours.count ?? -1)")
         }
         drag?.lastFrame = event.frame
-        if let cluster = drag?.cluster {
-            // Absolute-from-start targets: no incremental drift, and a
-            // follower whose app rejected the last write self-heals on the
-            // next event. No mating, no overlay in cluster mode.
-            for follower in cluster.followers {
-                write(follower.start.offsetBy(
-                          dx: event.frame.minX - cluster.draggedStart.minX,
-                          dy: event.frame.minY - cluster.draggedStart.minY),
-                      to: follower.member.window,
-                      bundleID: follower.member.member.bundleID)
-            }
+        if drag?.cluster != nil {
+            // Cluster mode: the ghosts (mouse-driven, zero IPC) carry the
+            // visual; AX moved events only refresh lastFrame. The followers
+            // settle once, at release. No mating, no overlay in cluster mode.
             return
         }
         updateCandidate(for: event)
@@ -172,14 +170,29 @@ final class MagnetDragSession {
            }) {
             let live = coordinator.liveMembers(of: group)
             if live.count >= 2 {
-                cluster = Drag.Cluster(
-                    draggedStart: event.frame,
-                    followers: live.filter { $0.window.id != event.windowID }
-                        .map { (member: $0, start: $0.window.frame) })
+                let followers = live.filter { $0.window.id != event.windowID }
+                    .map { (member: $0, start: $0.window.frame) }
+                // Ghosts stand in for the followers: zero mid-drag IPC. The
+                // mouse drives them in Cocoa space end-to-end — same-space
+                // deltas need no conversion; only the start frames cross
+                // spaces, inside the overlay's show().
+                ghosts.show(frames: followers.map { $0.start })
+                let base = NSEvent.mouseLocation
+                let dragged = NSEvent.addGlobalMonitorForEvents(
+                    matching: [.leftMouseDragged]) { [weak self] _ in
+                    let now = NSEvent.mouseLocation
+                    self?.ghosts.translate(to: CGVector(dx: now.x - base.x,
+                                                        dy: now.y - base.y))
+                }
+                trace("cluster ghosts shown followers=\(followers.count) " +
+                      "base=\(base.x),\(base.y)")
+                cluster = Drag.Cluster(draggedStart: event.frame,
+                                       followers: followers,
+                                       dragMonitor: dragged)
             }
         }
-        // No preview in cluster mode — the followers moving live are the
-        // feedback. Hide defensively in case a plain session left one up.
+        // No preview in cluster mode — the ghosts are the feedback. Hide
+        // defensively in case a plain session left one up.
         if cluster != nil { overlay.hide() }
         let mouseUp = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) {
             [weak self] _ in self?.finishDrag()
@@ -232,11 +245,28 @@ final class MagnetDragSession {
             trace("mouse-up with no open session")
             return
         }
-        if open.cluster != nil {
-            // Cluster carry: nothing settles, no un-mate — the arrangement was
-            // preserved by construction, adjacency included.
-            trace("mouse-up: cluster session closed, nothing to settle")
+        if let cluster = open.cluster {
+            // Ghosts down and monitors gone first: the settle writes below
+            // must not race another gesture's events.
             endDrag()
+            // The driver's read of the released frame is the source of truth
+            // — it includes any OS clamping (menu bar, screen edges) that
+            // mouse math would miss. lastFrame is the AX-observed fallback
+            // for a window that vanished before it could be re-enumerated.
+            let released = liveWindow(id: open.windowID,
+                                      bundleID: open.bundleID)?.frame
+                ?? open.lastFrame
+            let dx = released.minX - cluster.draggedStart.minX
+            let dy = released.minY - cluster.draggedStart.minY
+            trace("cluster settle followers=\(cluster.followers.count) " +
+                  "delta=\(dx),\(dy)")
+            // One real write per follower, absolute from its start frame —
+            // the whole point of the ghost carry.
+            for follower in cluster.followers {
+                write(follower.start.offsetBy(dx: dx, dy: dy),
+                      to: follower.member.window,
+                      bundleID: follower.member.member.bundleID)
+            }
             return
         }
         let candidate = open.candidate
@@ -280,12 +310,15 @@ final class MagnetDragSession {
         trace("unmated \(open.bundleID)#\(slot): released away from its group")
     }
 
-    /// Removes the mouse-up monitor and the preview. Safe to call twice: a
-    /// stuck overlay is worse than no overlay.
+    /// Removes both monitors, the preview, and the ghosts. Safe to call
+    /// twice: a stuck overlay — or a stuck ghost — is worse than none.
+    /// `deinit` also lands here.
     private func endDrag() {
         if let mouseUp = drag?.mouseUpMonitor { NSEvent.removeMonitor(mouseUp) }
+        if let dragged = drag?.cluster?.dragMonitor { NSEvent.removeMonitor(dragged) }
         drag = nil
         overlay.hide()
+        ghosts.hide()
     }
 
     /// Persists the pair as a group. When either window's identity is not
