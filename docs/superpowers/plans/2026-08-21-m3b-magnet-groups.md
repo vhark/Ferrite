@@ -692,7 +692,9 @@ final class GroupReflowPlannerTests: XCTestCase {
             group: group,
             live: [window(1, "a", 0, CGRect(x: 0, y: 0, width: 400, height: 400)),
                    window(2, "b", 0, CGRect(x: 408, y: 0, width: 400, height: 400))],
-            preset: .symmetric, gap: 0, minimumSize: .zero)
+            // NOT .symmetric: M3a deliberately equalises weights there (PRD §3.3),
+            // so only a weight-honouring preset can show member ranks arriving.
+            preset: .treemap(bias: .center), gap: 0, minimumSize: .zero)
         let frames = plan!.frames
         XCTAssertGreaterThan(frames[1]!.width, frames[2]!.width * 2,
                              "a weight-3 member must get roughly three times the area")
@@ -921,3 +923,4 @@ Human-driven; do not attempt from an agent.
 - **Risk — event storms.** Moved events fire continuously during a drag, and each one runs a mating query over the display's windows. The query is O(windows) with no AX calls beyond the enumeration the driver already caches, but if it proves heavy in T10, throttle the *preview* to ~30fps while leaving mouse-up resolution exact.
 - **Risk — suppression is load-bearing twice** (T6 and T8). If mating or resize ever oscillates in live testing, suspect a suppression miss (frame tolerance too tight, or deadline too short) before suspecting the geometry, which is property-tested.
 - **Known gap carried forward:** weights are per-group and per-`(bundleID, slot)`, so a group spanning two displays is possible but untested — the two-displays-one-app residual in `docs/BACKLOG.md` applies here too.
+- **Plan defect, corrected during implementation (T4):** the original `testWeightsComeFromMemberRanks` snippet solved with `.symmetric`, which M3a flattens to equal weights by design (`GroupLayoutSolver.solve`, "PRD §3.3: symmetric is the treemap's equal-weights case", locked by `GroupLayoutPartitionTests.testAreaIsProportionalToWeight`). The test could therefore never observe a member's rank and failed with 404 vs 404. The assertion was right and the planner was right; only the preset was wrong, so the shipped test uses `.treemap(bias: .center)`. `.symmetric` was deliberately NOT made weight-honouring — that would break the M3a contract.
