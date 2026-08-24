@@ -32,6 +32,17 @@ enum ScreenGeometry {
                       height: visible.height)
     }
 
+    /// Flips a CG-space rect (origin top-left, y downward — the space the AX
+    /// API reports window frames in) back into Cocoa screen space, anchored to
+    /// the primary screen. Inverse of `cgArea(of:primary:)`.
+    static func nsRect(fromCG rect: CGRect) -> CGRect {
+        guard let primary = NSScreen.screens.first else { return rect }
+        return CGRect(x: rect.minX,
+                      y: primary.frame.maxY - rect.maxY,
+                      width: rect.width,
+                      height: rect.height)
+    }
+
     /// Current display configuration from attached screens.
     static var currentConfiguration: DisplayConfiguration {
         DisplayConfiguration(displays: NSScreen.screens.compactMap(displayInfo(for:)))
