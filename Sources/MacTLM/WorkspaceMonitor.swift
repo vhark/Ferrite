@@ -85,17 +85,33 @@ final class WorkspaceMonitor {
         })
     }
 
-    /// Last frame observed for each window, so features that need a "before"
-    /// frame (resize propagation, drag sessions) have one without re-reading AX.
+    /// The frame each window had *before* the event now being delivered — the
+    /// "previous" that resize propagation compares against. That is why it is
+    /// written after delivery rather than before: storing first would hand
+    /// every handler back the frame the event it is holding already carries.
     private var lastEvents: [Int: AppObserver.WindowEvent] = [:]
 
     func lastKnownFrame(ofWindow windowID: Int) -> CGRect? {
         lastEvents[windowID]?.frame
     }
 
+    /// Records a frame MacTLM wrote itself. The AX echo of our own `setFrame`
+    /// is deliberately dropped by the magnet layer, so without this the cache
+    /// would keep offering the frame the window had before we moved it.
+    func noteWrittenFrame(_ frame: CGRect, ofWindow windowID: Int,
+                          pid: pid_t, bundleID: String) {
+        lastEvents[windowID] = AppObserver.WindowEvent(kind: .moved, bundleID: bundleID,
+                                                       pid: pid, windowID: windowID,
+                                                       frame: frame)
+    }
+
     private func record(_ event: AppObserver.WindowEvent) {
-        lastEvents[event.windowID] = event
+        let before = lastEvents[event.windowID]?.frame
         onWindowEvent?(event)
+        // A handler that wrote this window while it had the event has already
+        // recorded the frame it wrote, which is newer than this event's.
+        guard lastEvents[event.windowID]?.frame == before else { return }
+        lastEvents[event.windowID] = event
     }
 
     /// AX window ids never come back after their process dies, so the cache is

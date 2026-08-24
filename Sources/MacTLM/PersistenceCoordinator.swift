@@ -21,6 +21,11 @@ final class PersistenceCoordinator {
     private(set) lazy var templateLauncher = TemplateLauncher(driver: driver,
                                                               coordinator: self,
                                                               engine: engine)
+    /// Mating and shared-edge resize. Lazy: it is only needed once window
+    /// events start arriving, and it needs a fully initialized coordinator.
+    private lazy var magnetSession = MagnetDragSession(driver: driver,
+                                                       monitor: monitor,
+                                                       coordinator: self)
     private struct PendingSettle {
         let debouncer: Debouncer
         let fire: () -> Void
@@ -109,6 +114,12 @@ final class PersistenceCoordinator {
             }
             self?.tracker.noteTermination(bundleID: bundleID)
         }
+        // Mating and resize propagation ride the rich per-window events. The
+        // coarse activity signal above keeps its meaning and its call sites.
+        monitor.onWindowEvent = { [weak self] event in
+            guard let self, !self.isPaused else { return }
+            self.magnetSession.handle(event)
+        }
         monitor.start()
 
         // Display-configuration changes swap the record namespace and re-assert.
@@ -176,6 +187,68 @@ final class PersistenceCoordinator {
                                         excludedBundleIDs: currentExcludedBundleIDs)
         let moved = reflow.apply(preset)
         NSLog("MacTLM: reflow %@ moved %d windows", String(describing: preset), moved)
+    }
+
+    // MARK: - Magnet groups
+
+    /// The magnet groups remembered for the display configuration in use now.
+    func magnetGroups() -> [MagnetGroup] {
+        tracker.magnetGroups
+    }
+
+    /// Mates two windows: extends whichever group already holds one of them,
+    /// unions the two when both are grouped already, otherwise starts a new
+    /// group. Persisted through the tracker — writing the store file from here
+    /// would be undone by the tracker's next debounced save.
+    func mate(_ member: MagnetMember, with other: MagnetMember) {
+        guard member != other else { return }
+        var groups = tracker.magnetGroups
+        let host = groups.firstIndex { $0.contains(bundleID: member.bundleID,
+                                                   slot: member.slot) }
+        let mate = groups.firstIndex { $0.contains(bundleID: other.bundleID,
+                                                   slot: other.slot) }
+        switch (host, mate) {
+        case (let index?, nil):
+            groups[index].members.append(other)
+        case (nil, let index?):
+            groups[index].members.append(member)
+        case (let left?, let right?):
+            guard left != right else { return } // already mates
+            let absorbed = groups.remove(at: right)
+            groups[right < left ? left - 1 : left].merge(absorbed)
+        case (nil, nil):
+            groups.append(MagnetGroup(members: [member, other]))
+        }
+        tracker.setMagnetGroups(groups.filter { !$0.isDissolved })
+    }
+
+    /// Forgets a group. Its windows keep their frames: ungrouping changes what
+    /// MacTLM remembers, it does not move anything.
+    func ungroup(_ groupID: UUID) {
+        let groups = tracker.magnetGroups
+        let remaining = groups.filter { $0.id != groupID }
+        guard remaining.count != groups.count else { return }
+        tracker.setMagnetGroups(remaining)
+    }
+
+    /// The record slot a live window resolves to, or nil when its identity is
+    /// not certain. The order fallback is off on purpose: group membership is
+    /// written to disk, and the fallback is a guess — remembering the wrong
+    /// window as a mate is worse than not remembering the mate at all.
+    func slot(forWindowID windowID: Int, bundleID: String) -> Int? {
+        let records = tracker.recordsFor(bundleID: bundleID)
+        let windows = driver.windows(ofBundleID: bundleID)
+        guard !records.isEmpty, !windows.isEmpty else { return nil }
+        return WindowMatcher.assign(records: records,
+                                    to: Self.windowCandidates(windows),
+                                    allowOrderFallback: false)[windowID]?.slot
+    }
+
+    private static func windowCandidates(_ windows: [DriverWindow]) -> [WindowCandidate] {
+        windows.enumerated().map { index, window in
+            WindowCandidate(id: window.id, title: window.title,
+                            titleHash: window.titleHash, order: index)
+        }
     }
 
     func renameBundle(from oldName: String, to newName: String) {
@@ -261,12 +334,8 @@ final class PersistenceCoordinator {
                             bundleID: String) -> [Int: String] {
         let windows = driver.windows(ofBundleID: bundleID)
         guard !windows.isEmpty else { return [:] }
-        let candidates = windows.enumerated().map { index, window in
-            WindowCandidate(id: window.id, title: window.title,
-                            titleHash: window.titleHash, order: index)
-        }
         let assignment = WindowMatcher.assign(
-            records: records, to: candidates,
+            records: records, to: Self.windowCandidates(windows),
             allowOrderFallback: windows.count >= records.count)
         var titles: [Int: String] = [:]
         for window in windows where !window.title.isEmpty {

@@ -111,6 +111,18 @@ public final class WindowTracker {
         records.apps
     }
 
+    /// Magnet groups remembered for the loaded configuration.
+    public var magnetGroups: [MagnetGroup] { records.groups }
+
+    /// Replaces the remembered groups, then flushes. Group edits come from a
+    /// user gesture, so they must neither wait on the capture debounce nor be
+    /// clobbered by it: the debounced save writes this whole record set, so a
+    /// group written anywhere else would not survive the next capture.
+    public func setMagnetGroups(_ groups: [MagnetGroup]) {
+        records.groups = groups
+        persist()
+    }
+
     /// Call when the display configuration changes: swap namespaces.
     public func reloadForCurrentConfiguration() {
         migrate(to: configKey())
