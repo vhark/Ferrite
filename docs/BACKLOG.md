@@ -38,6 +38,7 @@ Test suite: 205 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and 
 
 - **Late-arrival restacking (Fix C, `06a98d1`).** When the 15s launch deadline fires before a slow app draws a window, `inFlight` is now retained (`reportedMissing`) so the app rejoins the z-order when it finally settles, with a 120s hard stop. Only reachable on a cold launch of a slow app; not yet observed live. The next full quit-and-relaunch of `Design&Comms` exercises it.
 - **A→B membership move.** Dragging a member of group A onto a window of group B should leave A and join B (un-mate runs before mate on release). Implemented and unit-adjacent (ordering is explicit in `finishDrag`), but never exercised live with two simultaneous groups. First session with two clusters verifies it.
+- **Per-app merged placement (M2e, `f2e051c`).** The two-displays-one-app residual is fixed in code: one assignment per app per bundle launch, absolute target rects, display-aware order fallback, 8 contract tests including the cross-display claim regression. Not yet observed live — the acceptance protocol (plan Task 3) needs the second display awake. Passing it retires the residual and tags `v0.10.0-m2e`.
 
 ## Platform findings (paid for in blood, do not regress)
 
@@ -86,7 +87,6 @@ Test suite: 205 unit tests over `MacTLMCore` (pure, Linux-portable). AppKit and 
 | ISO-8601 store dates | Sub-second precision truncated | Never compare live vs re-loaded records for equality |
 | Login restore ordering | Startup sweep captures Resume-placed windows; arming settles for already-running remembered apps fixes the restore, but Resume still wins the first paint | Verified working; cosmetic |
 | Launching an app does not reopen its documents | Document apps may come back empty (Open dialog) | Out of scope; finding 3 stops mis-placement |
-| One app with windows on two displays in a bundle | A window can be claimed by the wrong display's records | Each display's records are matched against all of that app's windows. Single-display setups are unaffected. Fix needs per-app merged placement with absolute target rects; deferred until there is a two-monitor setup to test against |
 
 ## Linux port (post-M2)
 
