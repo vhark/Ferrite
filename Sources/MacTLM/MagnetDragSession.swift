@@ -75,6 +75,10 @@ final class MagnetDragSession {
             // Only a held left button is a drag. Without this a programmatic
             // move opens a session that waits for the user's next click
             // anywhere and then snaps a window they never touched.
+            //
+            // Verified live 2026-08-24: AX delivers moved notifications while
+            // the button is still down, so reading it here does not race the
+            // drag. Every sampled event during a real drag reported buttons=1.
             guard NSEvent.pressedMouseButtons & 1 != 0 else { return }
             openDrag(for: event)
         }

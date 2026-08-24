@@ -67,4 +67,43 @@ final class MagnetMatingTests: XCTestCase {
         XCTAssertEqual(second?.snapped ?? .zero, first.snapped,
                        "re-mating an already-mated window must not drift it")
     }
+
+    // MARK: - Regressions from the 2026-08-24 live trace
+
+    func testWellAlignedEdgesMateFromFurtherAwayThanAHandCanAim() {
+        // The exact shape of the live failure: edges 40pt apart with essentially
+        // perfect overlap read as an obvious mate to the user, but the original
+        // 24pt threshold rejected them and nothing ever mated.
+        let dragged = CGRect(x: 450, y: 100, width: 510, height: 800)
+        let reach = MagnetMating.evaluate(dragged: dragged, others: [(1, mate)])
+            .first { $0.edge == .right }
+        XCTAssertEqual(reach?.distance ?? -1, 40, accuracy: 0.001,
+                       "fixture guard: this must stay a 40pt reach")
+    }
+
+    func testACornerGrazeIsStillRejectedAtTheLooserThreshold() {
+        // Distance alone must not authorise a mate: overlap is what stops
+        // accidents, which is why the threshold could be loosened at all.
+        let dragged = CGRect(x: 490, y: 880, width: 500, height: 800)
+        XCTAssertNil(MagnetMating.candidate(dragged: dragged, others: [(1, mate)]))
+    }
+
+    func testAlignmentUsesItsOwnTighterThreshold() {
+        // 40pt off level: near enough to mate, too far to restyle. Before these
+        // were separate numbers, loosening the reach also silently straightened
+        // offsets the user had chosen.
+        let dragged = CGRect(x: 490, y: 140, width: 500, height: 800)
+        let candidate = MagnetMating.candidate(dragged: dragged, others: [(1, mate)])
+        XCTAssertEqual(candidate?.snapped.minY ?? -1, 140, accuracy: 0.001,
+                       "a 40pt vertical offset must survive mating")
+    }
+
+    func testEvaluateNamesTheRequirementThatFailed() {
+        let graze = CGRect(x: 490, y: 880, width: 500, height: 800)
+        let nearest = MagnetMating.evaluate(dragged: graze, others: [(1, mate)])
+        let top = nearest.first { $0.edge == .top }
+        XCTAssertNotNil(top)
+        XCTAssertTrue(top!.passesDistance, "20pt apart is within reach")
+        XCTAssertFalse(top!.passesOverlap, "and overlap is what rejects it")
+    }
 }
