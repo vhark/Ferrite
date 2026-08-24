@@ -34,12 +34,27 @@ public struct WindowRecord: Codable, Equatable {
     }
 }
 
-/// Everything remembered for one display configuration: bundleID → window slots.
+/// Everything remembered for one display configuration: bundleID → window
+/// slots, plus the magnet groups the user built on that arrangement.
 public struct ConfigurationRecords: Codable, Equatable {
     public var apps: [String: [WindowRecord]]
+    public var groups: [MagnetGroup]
 
-    public init(apps: [String: [WindowRecord]] = [:]) {
+    public init(apps: [String: [WindowRecord]] = [:], groups: [MagnetGroup] = []) {
         self.apps = apps
+        self.groups = groups
+    }
+
+    private enum CodingKeys: String, CodingKey { case apps, groups }
+
+    /// Absent-tolerant on purpose: the store is fail-soft, so a decode error
+    /// yields an empty store and the next save destroys the user's real data.
+    /// Every field added here must decode from a payload written before it
+    /// existed (BACKLOG finding 11).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        apps = try container.decodeIfPresent([String: [WindowRecord]].self, forKey: .apps) ?? [:]
+        groups = try container.decodeIfPresent([MagnetGroup].self, forKey: .groups) ?? []
     }
 }
 
