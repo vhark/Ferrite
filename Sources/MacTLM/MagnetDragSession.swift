@@ -172,11 +172,26 @@ final class MagnetDragSession {
             if live.count >= 2 {
                 let followers = live.filter { $0.window.id != event.windowID }
                     .map { (member: $0, start: $0.window.frame) }
-                // Ghosts stand in for the followers: zero mid-drag IPC. The
-                // mouse drives them in Cocoa space end-to-end — same-space
-                // deltas need no conversion; only the start frames cross
-                // spaces, inside the overlay's show().
-                ghosts.show(frames: followers.map { $0.start })
+                // The session opens on the FIRST AX moved event, 100-300ms
+                // after the hand started dragging — by then the grabbed
+                // window has already travelled some distance D. Anchoring the
+                // formation to its open-time frame bakes D in as a permanent
+                // gap (observed live 2026-08-24). The at-rest frame is free:
+                // lastKnownFrame is forwarded-before-stored, so at open it
+                // still holds the pre-drag frame.
+                let trueStart = monitor.lastKnownFrame(ofWindow: event.windowID)
+                    ?? event.frame
+                let drift = CGVector(dx: event.frame.minX - trueStart.minX,
+                                     dy: event.frame.minY - trueStart.minY)
+                // Ghosts stand in for the followers: zero mid-drag IPC. Shown
+                // pre-offset by D so the outlines match the already-moving
+                // window from their first frame. The mouse drives them in
+                // Cocoa space end-to-end — same-space deltas need no
+                // conversion; only the start frames cross spaces, inside the
+                // overlay's show().
+                ghosts.show(frames: followers.map {
+                    $0.start.offsetBy(dx: drift.dx, dy: drift.dy)
+                })
                 let base = NSEvent.mouseLocation
                 let dragged = NSEvent.addGlobalMonitorForEvents(
                     matching: [.leftMouseDragged]) { [weak self] _ in
@@ -185,8 +200,8 @@ final class MagnetDragSession {
                                                         dy: now.y - base.y))
                 }
                 trace("cluster ghosts shown followers=\(followers.count) " +
-                      "base=\(base.x),\(base.y)")
-                cluster = Drag.Cluster(draggedStart: event.frame,
+                      "base=\(base.x),\(base.y) drift=\(drift.dx),\(drift.dy)")
+                cluster = Drag.Cluster(draggedStart: trueStart,
                                        followers: followers,
                                        dragMonitor: dragged)
             }
