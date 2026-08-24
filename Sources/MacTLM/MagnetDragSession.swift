@@ -204,27 +204,14 @@ final class MagnetDragSession {
                                            mode: group.resizeMode,
                                            gap: Self.gap)
         guard !moves.isEmpty else { return }
-        for member in backToFront(live.filter { moves[$0.window.id] != nil }) {
+        // Deepest first, so a write that raises its own window cannot leave the
+        // group's stacking inverted. Shrink touches one mate, and ordering one
+        // window costs no CG sweep.
+        let ordered = PersistenceCoordinator.backToFront(
+            live.filter { moves[$0.window.id] != nil })
+        for member in ordered {
             guard let frame = moves[member.window.id] else { continue }
             write(frame, to: member.window, bundleID: member.member.bundleID)
-        }
-    }
-
-    /// Deepest first, so a `setFrame` that raises its window cannot leave the
-    /// group's stacking inverted. The CG sweep is skipped for a single window,
-    /// which is the common case — shrink touches one mate.
-    private func backToFront(
-        _ members: [PersistenceCoordinator.LiveMember]
-    ) -> [PersistenceCoordinator.LiveMember] {
-        guard members.count > 1 else { return members }
-        let order = ZOrderMatcher.zIndices(
-            axWindows: members.map {
-                ZOrderMatcher.AXRef(id: $0.window.id, pid: $0.window.pid,
-                                    frame: $0.window.frame)
-            },
-            cgFrontToBack: ZOrderCapture.frontToBack())
-        return members.sorted {
-            (order[$0.window.id] ?? .max) > (order[$1.window.id] ?? .max)
         }
     }
 

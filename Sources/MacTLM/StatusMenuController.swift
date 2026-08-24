@@ -27,9 +27,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menuLayouts.removeAll()
 
         // PRD §4: the reflow row sits at the top, above anything user-created.
-        menu.addItem(sectionHeader("Reflow this display"))
+        // The row reflows the frontmost window's group when it has one, so the
+        // header says which.
+        let groups = coordinator.magnetGroupSummaries()
+        menu.addItem(sectionHeader(groups.contains { $0.isActive }
+            ? "Reflow this group" : "Reflow this display"))
         menu.addItem(presetRow())
         menu.addItem(.separator())
+
+        if !groups.isEmpty {
+            menu.addItem(sectionHeader("Groups"))
+            for group in groups { menu.addItem(groupItem(group)) }
+            menu.addItem(.separator())
+        }
 
         // One row per workspace. Archived bundles are already excluded, so
         // their layouts never surface here even though they stay on disk.
@@ -142,6 +152,52 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         return item
     }
 
+    /// A weight nudge rather than a jump: a few grows promote a window
+    /// noticeably without collapsing its mates.
+    private static let growFactor = 1.25
+    private static let shrinkFactor = 0.8
+
+    /// One group row: the mated apps, with everything that acts on the group in
+    /// its submenu. Nothing acts from the row itself — `Ungroup` is one click
+    /// from a title, and titles are for reading.
+    private func groupItem(_ group: PersistenceCoordinator.GroupSummary) -> NSMenuItem {
+        let item = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
+        item.indentationLevel = 1
+        let submenu = NSMenu()
+
+        let modeItem = NSMenuItem(title: "Resize mode", action: nil, keyEquivalent: "")
+        let modes = NSMenu()
+        let choices: [(title: String, mode: MagnetGroup.ResizeMode, action: Selector)] = [
+            ("Shrink", .shrink, #selector(setGroupModeShrink(_:))),
+            ("Nudge", .nudge, #selector(setGroupModeNudge(_:))),
+        ]
+        for choice in choices {
+            let row = groupActionItem(choice.title, choice.action, group.id)
+            row.state = group.resizeMode == choice.mode ? .on : .off
+            modes.addItem(row)
+        }
+        modeItem.submenu = modes
+        submenu.addItem(modeItem)
+        submenu.addItem(.separator())
+        submenu.addItem(groupActionItem("Grow frontmost",
+                                        #selector(growGroupFrontmost(_:)), group.id))
+        submenu.addItem(groupActionItem("Shrink frontmost",
+                                        #selector(shrinkGroupFrontmost(_:)), group.id))
+        submenu.addItem(.separator())
+        submenu.addItem(groupActionItem("Ungroup",
+                                        #selector(ungroupGroup(_:)), group.id))
+        item.submenu = submenu
+        return item
+    }
+
+    private func groupActionItem(_ title: String, _ action: Selector,
+                                 _ groupID: UUID) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = groupID as NSUUID
+        return item
+    }
+
     // `LayoutShortcuts.shortcut(forBundle:)` and `NSMenuItem.setShortcut` are
     // main-actor bound; menu building already happens on the main actor.
     @MainActor
@@ -198,6 +254,31 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         coordinator.reflowDisplay(Self.reflowPresets[sender.tag].preset)
         // A button inside a menu item's view does not dismiss the menu itself.
         statusItem.menu?.cancelTracking()
+    }
+
+    @objc private func setGroupModeShrink(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator.setResizeMode(.shrink, ofGroup: id)
+    }
+
+    @objc private func setGroupModeNudge(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator.setResizeMode(.nudge, ofGroup: id)
+    }
+
+    @objc private func growGroupFrontmost(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator.adjustFrontmostWeight(inGroup: id, by: Self.growFactor)
+    }
+
+    @objc private func shrinkGroupFrontmost(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator.adjustFrontmostWeight(inGroup: id, by: Self.shrinkFactor)
+    }
+
+    @objc private func ungroupGroup(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator.ungroup(id)
     }
 
     @objc private func launchSingleLayout(_ sender: NSMenuItem) {

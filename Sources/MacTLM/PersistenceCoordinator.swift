@@ -179,14 +179,18 @@ final class PersistenceCoordinator {
         templateLauncher.apply(layouts, excludedBundleIDs: currentExcludedBundleIDs)
     }
 
-    /// Reflows the display holding the frontmost window into `preset`. A reflow
-    /// is a normal window move: the tracker records the new frames afterwards,
-    /// so the arrangement is remembered like any other.
+    /// Reflows the frontmost window's magnet group, or its whole display when
+    /// it has no group, into `preset`. A reflow is a normal window move: the
+    /// tracker records the new frames afterwards, so the arrangement is
+    /// remembered like any other.
     func reflowDisplay(_ preset: GroupLayoutSolver.Preset) {
         let reflow = DisplayGroupReflow(driver: driver,
-                                        excludedBundleIDs: currentExcludedBundleIDs)
-        let moved = reflow.apply(preset)
-        NSLog("MacTLM: reflow %@ moved %d windows", String(describing: preset), moved)
+                                        excludedBundleIDs: currentExcludedBundleIDs,
+                                        coordinator: self)
+        let outcome = reflow.apply(preset)
+        if let group = outcome.group { lastGroupPreset[group.id] = preset }
+        NSLog("MacTLM: reflow %@ moved %d windows%@", String(describing: preset),
+              outcome.moved, outcome.group == nil ? "" : " in a group")
     }
 
     // MARK: - Magnet groups
@@ -268,6 +272,138 @@ final class PersistenceCoordinator {
             }
         }
         return result
+    }
+
+    /// Live members ordered deepest first, so a `setFrame` that raises its own
+    /// window cannot leave the group's stacking inverted. The last element is
+    /// therefore the frontmost. The CG sweep is skipped for a single window.
+    static func backToFront(_ members: [LiveMember]) -> [LiveMember] {
+        guard members.count > 1 else { return members }
+        let order = ZOrderMatcher.zIndices(
+            axWindows: members.map {
+                ZOrderMatcher.AXRef(id: $0.window.id, pid: $0.window.pid,
+                                    frame: $0.window.frame)
+            },
+            cgFrontToBack: ZOrderCapture.frontToBack())
+        return members.sorted {
+            (order[$0.window.id] ?? .max) > (order[$1.window.id] ?? .max)
+        }
+    }
+
+    /// The preset each group was last reflowed with, for this session only: a
+    /// preset is a gesture, not a setting, so it is never persisted.
+    private var lastGroupPreset: [UUID: GroupLayoutSolver.Preset] = [:]
+
+    /// The `(bundleID, slot)` of the frontmost app's front window, when its
+    /// identity is certain. Excluded apps and MacTLM itself never own a group.
+    private func frontmostMember() -> MagnetMember? {
+        guard let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+              bundleID != Bundle.main.bundleIdentifier,
+              !excludeList.isExcluded(bundleID),
+              let window = driver.windows(ofBundleID: bundleID).first,
+              let slot = slot(forWindowID: window.id, bundleID: bundleID)
+        else { return nil }
+        return MagnetMember(bundleID: bundleID, slot: slot)
+    }
+
+    /// The group that owns the frontmost window, with the members that have a
+    /// window open right now. Group reflow is an override of whole-display
+    /// reflow, so an unmated frontmost window answers nil and the whole
+    /// display reflows exactly as it did before groups existed. Two live
+    /// members is the floor: a group whose mates have all closed is not a
+    /// group any more.
+    func activeGroup() -> (group: MagnetGroup, live: [LiveMember])? {
+        let groups = tracker.magnetGroups
+        guard !groups.isEmpty, let front = frontmostMember(),
+              let group = groups.first(where: {
+                  $0.contains(bundleID: front.bundleID, slot: front.slot)
+              })
+        else { return nil }
+        let live = liveMembers(of: group)
+        guard live.count > 1 else { return nil }
+        return (group, live)
+    }
+
+    /// One menu row's worth of a group, with no AX resolution left to do.
+    struct GroupSummary {
+        let id: UUID
+        let resizeMode: MagnetGroup.ResizeMode
+        /// Localized app names of the members with a window open, in the order
+        /// the user built the group.
+        let title: String
+        /// True for the group the glyph row would reflow right now.
+        let isActive: Bool
+    }
+
+    /// The groups worth showing: two or more windows open. A group whose
+    /// windows have all closed renders nothing rather than a broken row.
+    func magnetGroupSummaries() -> [GroupSummary] {
+        let groups = tracker.magnetGroups
+        guard !groups.isEmpty else { return [] }
+        let front = frontmostMember()
+        return groups.compactMap { group in
+            let live = Set(liveMembers(of: group).map(\.member))
+            guard live.count > 1 else { return nil }
+            let isActive = front.map {
+                group.contains(bundleID: $0.bundleID, slot: $0.slot)
+            } ?? false
+            return GroupSummary(
+                id: group.id,
+                resizeMode: group.resizeMode,
+                title: Self.title(ofMembers: group.members.filter(live.contains)),
+                isActive: isActive)
+        }
+    }
+
+    /// "Arc + Safari", or "Arc ×2" — two windows of one app is the common
+    /// group, and repeating its name would read like a bug.
+    private static func title(ofMembers members: [MagnetMember]) -> String {
+        var order: [String] = []
+        var counts: [String: Int] = [:]
+        for member in members {
+            let name = localizedAppName(forBundleID: member.bundleID)
+            if counts[name] == nil { order.append(name) }
+            counts[name, default: 0] += 1
+        }
+        return order.map { name in
+            let count = counts[name] ?? 1
+            return count == 1 ? name : "\(name) ×\(count)"
+        }.joined(separator: " + ")
+    }
+
+    /// Switches a group between shrink and nudge. Written through the tracker
+    /// like `ungroup`: a direct store write would be undone by its next save.
+    func setResizeMode(_ mode: MagnetGroup.ResizeMode, ofGroup groupID: UUID) {
+        var groups = tracker.magnetGroups
+        guard let index = groups.firstIndex(where: { $0.id == groupID }),
+              groups[index].resizeMode != mode else { return }
+        groups[index].resizeMode = mode
+        tracker.setMagnetGroups(groups)
+    }
+
+    /// Scales the weight of the group's frontmost open window — the one the
+    /// user is looking at, not the frontmost window overall — and re-runs the
+    /// group's last preset so the change shows immediately. Clamping belongs
+    /// to `MagnetGroup.adjustWeight` and is not repeated here.
+    func adjustFrontmostWeight(inGroup groupID: UUID, by factor: Double) {
+        var groups = tracker.magnetGroups
+        guard let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        let live = liveMembers(of: groups[index])
+        // `backToFront` ends at the front.
+        guard live.count > 1, let front = Self.backToFront(live).last else { return }
+        groups[index].adjustWeight(bundleID: front.member.bundleID,
+                                   slot: front.member.slot, by: factor)
+        tracker.setMagnetGroups(groups)
+        guard let preset = lastGroupPreset[groupID] else {
+            // Nothing to re-run yet: the new weight lands the first time the
+            // user picks a preset. Reflowing with a preset they never chose
+            // would move windows they did not ask to have moved.
+            return NSLog("MacTLM: group weight changed, no preset applied yet")
+        }
+        let reflow = DisplayGroupReflow(driver: driver,
+                                        excludedBundleIDs: currentExcludedBundleIDs,
+                                        coordinator: self)
+        reflow.apply(preset, to: groups[index], live: live)
     }
 
     private static func windowCandidates(_ windows: [DriverWindow]) -> [WindowCandidate] {
