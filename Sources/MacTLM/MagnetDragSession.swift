@@ -33,10 +33,28 @@ final class MagnetDragSession {
         endDrag()
     }
 
+    /// Live tracing, enabled with `MACTLM_TRACE_DRAG=1`.
+    ///
+    /// Not scaffolding: mating correctness depends on AX delivery timing, mouse
+    /// button state and real window geometry, none of which a unit test can
+    /// reach. Two separate live defects (a reach threshold measured too tight,
+    /// and a session ended by an unexpected event) were both diagnosed with
+    /// this trace, so it stays available behind an env var it costs nothing to
+    /// leave in.
+    static let trace = ProcessInfo.processInfo.environment["MACTLM_TRACE_DRAG"] == "1"
+
+    private func trace(_ message: @autoclosure () -> String) {
+        guard Self.trace else { return }
+        NSLog("MacTLM/drag: \(message())")
+    }
+
     /// Entry point for every rich window event. Runs on the main thread: AX
     /// observers and global event monitors both deliver on the main run loop.
     func handle(_ event: AppObserver.WindowEvent) {
-        guard !isSelfInflicted(event) else { return }
+        if isSelfInflicted(event) {
+            trace("ignored self-inflicted \(event.kind) win=\(event.windowID)")
+            return
+        }
         switch event.kind {
         case .moved: handleMoved(event)
         case .resized: handleResized(event)
@@ -66,9 +84,13 @@ final class MagnetDragSession {
     private var drag: Drag?
 
     private func handleMoved(_ event: AppObserver.WindowEvent) {
+        let buttons = NSEvent.pressedMouseButtons
+        trace("moved \(event.bundleID) win=\(event.windowID) " +
+              "frame=\(event.frame) buttons=\(buttons) session=\(drag != nil)")
         if let open = drag, open.windowID != event.windowID {
             // Nobody drags two windows at once, and no mouse-up arrived for the
             // old one: dropping it is honest, snapping it would not be.
+            trace("ending session for win=\(open.windowID): a different window moved")
             endDrag()
         }
         if drag == nil {
@@ -79,10 +101,29 @@ final class MagnetDragSession {
             // Verified live 2026-08-24: AX delivers moved notifications while
             // the button is still down, so reading it here does not race the
             // drag. Every sampled event during a real drag reported buttons=1.
-            guard NSEvent.pressedMouseButtons & 1 != 0 else { return }
+            guard buttons & 1 != 0 else {
+                trace("no session: left button not held")
+                return
+            }
             openDrag(for: event)
+            trace("openDrag -> session=\(drag != nil) neighbours=\(drag?.neighbours.count ?? -1)")
         }
         updateCandidate(for: event)
+        if let candidate = drag?.candidate {
+            trace("candidate mate=\(candidate.mateID) \(candidate.edge) " +
+                  "dist=\(Int(candidate.distance))")
+        } else if let open = drag {
+            let nearest = MagnetMating.evaluate(
+                dragged: event.frame,
+                others: open.neighbours.map { (id: $0.windowID, frame: $0.frame) })
+            for evaluation in nearest.prefix(3) {
+                trace("  miss win=\(evaluation.mateID) \(evaluation.edge) " +
+                      "dist=\(Int(evaluation.distance)) " +
+                      "overlap=\(String(format: "%.2f", evaluation.overlap)) " +
+                      "dist_ok=\(evaluation.passesDistance) " +
+                      "overlap_ok=\(evaluation.passesOverlap)")
+            }
+        }
     }
 
     private func openDrag(for event: AppObserver.WindowEvent) {
@@ -90,7 +131,11 @@ final class MagnetDragSession {
         // Eligibility of the dragged window falls out of the sweep: the driver
         // only enumerates standard, non-minimized windows of unhidden regular
         // apps, and the sweep drops MacTLM and every excluded bundle.
-        guard eligible.contains(where: { $0.windowID == event.windowID }) else { return }
+        guard eligible.contains(where: { $0.windowID == event.windowID }) else {
+            trace("no session: win=\(event.windowID) is not eligible " +
+                  "(\(eligible.count) eligible windows swept)")
+            return
+        }
         let mouseUp = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) {
             [weak self] _ in self?.finishDrag()
         }
@@ -134,11 +179,21 @@ final class MagnetDragSession {
     /// Mouse-up: the drag is over. Snap if there is a mate, and remember the
     /// pair.
     private func finishDrag() {
-        guard let open = drag else { return }
+        guard let open = drag else {
+            trace("mouse-up with no open session")
+            return
+        }
+        let candidate = open.candidate
         endDrag()
-        guard let candidate = open.candidate,
-              let window = liveWindow(id: open.windowID, bundleID: open.bundleID)
-        else { return }
+        guard let candidate else {
+            trace("mouse-up: no mate, nothing to do")
+            return
+        }
+        guard let window = liveWindow(id: open.windowID, bundleID: open.bundleID) else {
+            trace("mouse-up: win=\(open.windowID) vanished before it could be snapped")
+            return
+        }
+        trace("mouse-up: snapping win=\(open.windowID) to \(candidate.snapped)")
         write(candidate.snapped, to: window, bundleID: open.bundleID)
         remember(open, matedTo: candidate)
     }
@@ -178,16 +233,36 @@ final class MagnetDragSession {
     // MARK: - Resize propagation
 
     private func handleResized(_ event: AppObserver.WindowEvent) {
-        // The gesture is a resize, not a move: a drag opened by the moved
-        // events a resize also emits must not snap the window on release.
-        if drag?.windowID == event.windowID { endDrag() }
+        // Measured live 2026-08-24: AX re-emits resized notifications whose
+        // frame is identical to the last one — 14 within 150ms while a window
+        // was merely being dragged. Two reasons to leave before doing anything
+        // else. Answering "which group is this?" costs an AX sweep per event,
+        // and, far worse, this handler used to end the drag session for any
+        // resized event at all: a drag was being destroyed dozens of times by
+        // resizes that resized nothing, so only the last moved events before
+        // release could establish a mate. That is why mating felt like it
+        // needed pinpoint aim.
+        guard let previous = monitor.lastKnownFrame(ofWindow: event.windowID) else { return }
+        let grew = abs(previous.width - event.frame.width) > 0.5
+            || abs(previous.height - event.frame.height) > 0.5
+        guard grew else {
+            trace("no-op resize win=\(event.windowID) frame=\(event.frame): ignored")
+            return
+        }
+
+        // Now it is genuinely a resize gesture rather than a move, so a session
+        // opened by the moved events a resize also emits must not snap on
+        // release.
+        if drag?.windowID == event.windowID {
+            trace("ending session for win=\(event.windowID): really resized to " +
+                  "\(event.frame.size)")
+            endDrag()
+        }
 
         // Cheapest question first: with no groups remembered there is nothing
-        // to propagate to, and resolving identity would cost an AX sweep of
-        // the app for every event of a resize the user is still dragging.
+        // to propagate to.
         let groups = coordinator.magnetGroups()
         guard !groups.isEmpty,
-              let previous = monitor.lastKnownFrame(ofWindow: event.windowID),
               let slot = coordinator.slot(forWindowID: event.windowID,
                                           bundleID: event.bundleID),
               let group = groups.first(where: {
@@ -207,6 +282,8 @@ final class MagnetDragSession {
                                            previous: previous,
                                            mode: group.resizeMode,
                                            gap: Self.gap)
+        trace("resize win=\(event.windowID) previous=\(previous) now=\(event.frame) " +
+              "mode=\(group.resizeMode) mates=\(frames.count - 1) moves=\(moves.count)")
         guard !moves.isEmpty else { return }
         // Deepest first, so a write that raises its own window cannot leave the
         // group's stacking inverted. Shrink touches one mate, and ordering one
