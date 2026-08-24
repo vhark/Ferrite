@@ -89,8 +89,16 @@ final class MagnetDragSession {
             /// mouse deltas — the mouse, not AX, carries the visual, so a
             /// busy follower app cannot stall the gesture.
             let dragMonitor: Any?
+            /// Ghost anchor, re-based on every AX moved event: `anchorOffset`
+            /// is the authoritative ghost offset (Cocoa) at the moment
+            /// `anchorMouse` was sampled; mouse ticks extrapolate from it.
+            /// Without re-anchoring, drift measured from the first (already
+            /// stale) AX event frame was baked in for the whole drag — the
+            /// fast-flick gap observed live 2026-08-24.
+            var anchorMouse: NSPoint
+            var anchorOffset: CGVector
         }
-        let cluster: Cluster?
+        var cluster: Cluster?
         /// The dragged window's frame at the most recent moved event, for the
         /// release-time adjacency test.
         var lastFrame: CGRect
@@ -124,10 +132,20 @@ final class MagnetDragSession {
             trace("openDrag -> session=\(drag != nil) neighbours=\(drag?.neighbours.count ?? -1)")
         }
         drag?.lastFrame = event.frame
-        if drag?.cluster != nil {
+        if var open = drag, var cluster = open.cluster {
             // Cluster mode: the ghosts (mouse-driven, zero IPC) carry the
-            // visual; AX moved events only refresh lastFrame. The followers
-            // settle once, at release. No mating, no overlay in cluster mode.
+            // visual between AX events, but every AX moved event is an
+            // authoritative window position — re-anchor on each one, so the
+            // ghost error is bounded by mouse travel during one event's
+            // latency instead of being fixed at open (the fast-flick gap).
+            let offset = ScreenGeometry.nsDelta(fromCG: CGVector(
+                dx: event.frame.minX - cluster.draggedStart.minX,
+                dy: event.frame.minY - cluster.draggedStart.minY))
+            cluster.anchorOffset = offset
+            cluster.anchorMouse = NSEvent.mouseLocation
+            open.cluster = cluster
+            drag = open
+            ghosts.translate(to: offset)
             return
         }
         updateCandidate(for: event)
@@ -184,26 +202,29 @@ final class MagnetDragSession {
                 let drift = CGVector(dx: event.frame.minX - trueStart.minX,
                                      dy: event.frame.minY - trueStart.minY)
                 // Ghosts stand in for the followers: zero mid-drag IPC. Shown
-                // pre-offset by D so the outlines match the already-moving
-                // window from their first frame. The mouse drives them in
-                // Cocoa space end-to-end — same-space deltas need no
-                // conversion; only the start frames cross spaces, inside the
-                // overlay's show().
-                ghosts.show(frames: followers.map {
-                    $0.start.offsetBy(dx: drift.dx, dy: drift.dy)
-                })
+                // at the at-rest frames, then immediately offset to match the
+                // already-moving window. The mouse extrapolates between AX
+                // re-anchors; frames cross spaces once inside show(), deltas
+                // via nsDelta.
+                ghosts.show(frames: followers.map { $0.start })
+                let anchorOffset = ScreenGeometry.nsDelta(fromCG: drift)
+                ghosts.translate(to: anchorOffset)
                 let base = NSEvent.mouseLocation
                 let dragged = NSEvent.addGlobalMonitorForEvents(
                     matching: [.leftMouseDragged]) { [weak self] _ in
+                    guard let self, let anchor = self.drag?.cluster else { return }
                     let now = NSEvent.mouseLocation
-                    self?.ghosts.translate(to: CGVector(dx: now.x - base.x,
-                                                        dy: now.y - base.y))
+                    self.ghosts.translate(to: CGVector(
+                        dx: anchor.anchorOffset.dx + now.x - anchor.anchorMouse.x,
+                        dy: anchor.anchorOffset.dy + now.y - anchor.anchorMouse.y))
                 }
                 trace("cluster ghosts shown followers=\(followers.count) " +
                       "base=\(base.x),\(base.y) drift=\(drift.dx),\(drift.dy)")
                 cluster = Drag.Cluster(draggedStart: trueStart,
                                        followers: followers,
-                                       dragMonitor: dragged)
+                                       dragMonitor: dragged,
+                                       anchorMouse: base,
+                                       anchorOffset: anchorOffset)
             }
         }
         // No preview in cluster mode — the ghosts are the feedback. Hide

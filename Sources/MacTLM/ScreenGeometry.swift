@@ -32,6 +32,14 @@ enum ScreenGeometry {
                       height: visible.height)
     }
 
+    /// A translation crossing from AX/CG space into Cocoa space: x carries
+    /// over, y flips sign. Deltas have no anchor, so unlike `nsRect(fromCG:)`
+    /// no screen height is involved — but the flip still lives here, in the
+    /// one file that owns it.
+    static func nsDelta(fromCG delta: CGVector) -> CGVector {
+        CGVector(dx: delta.dx, dy: -delta.dy)
+    }
+
     /// Flips a CG-space rect (origin top-left, y downward — the space the AX
     /// API reports window frames in) back into Cocoa screen space, anchored to
     /// the primary screen. Inverse of `cgArea(of:primary:)`.
