@@ -14,6 +14,19 @@ import CoreGraphics
 public enum MagnetScale {
     private static let epsilon: CGFloat = 0.5
 
+    /// True when any edge of `frame` is flush against `other` — the same
+    /// adjacency semantics as resize propagation and outer-edge
+    /// classification, exposed so membership decisions never re-derive
+    /// geometry.
+    public static func isAdjacent(_ frame: CGRect, to other: CGRect,
+                                  gap: CGFloat = 8,
+                                  tolerance: CGFloat = 12) -> Bool {
+        let all: [MagnetMating.Edge] = [.left, .right, .top, .bottom]
+        return all.contains {
+            isFlush(frame, other, edge: $0, gap: gap, tolerance: tolerance)
+        }
+    }
+
     /// Edges of `frame` that no mate is flush against. Same adjacency
     /// semantics as `MagnetResize`: facing edges within `gap + tolerance` and
     /// overlapping perpendicular extents.

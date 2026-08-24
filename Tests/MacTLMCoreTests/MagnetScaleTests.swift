@@ -30,6 +30,25 @@ final class MagnetScaleTests: XCTestCase {
                        "within gap+tolerance is still flush")
     }
 
+    // MARK: - Adjacency (membership decisions ride the same geometry)
+
+    func testFlushNeighboursAreAdjacent() {
+        XCTAssertTrue(MagnetScale.isAdjacent(left, to: right),
+                      "an 8pt-gap mate is adjacent on any edge")
+    }
+
+    func testDistantWindowsAreNotAdjacent() {
+        let far = CGRect(x: 3000, y: 0, width: 500, height: 500)
+        XCTAssertFalse(MagnetScale.isAdjacent(left, to: far))
+    }
+
+    func testCornerGrazeIsNotAdjacent() {
+        // Diagonal neighbour: near in both axes but zero perpendicular overlap.
+        let diagonal = CGRect(x: 1000, y: 1008, width: 500, height: 500)
+        XCTAssertFalse(MagnetScale.isAdjacent(left, to: diagonal),
+                       "touching corners is not being mated")
+    }
+
     // MARK: - Settle
 
     func testDraggedWindowKeepsOnlyItsProportionalShare() {
