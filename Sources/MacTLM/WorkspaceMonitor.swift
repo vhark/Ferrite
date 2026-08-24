@@ -8,6 +8,9 @@ final class WorkspaceMonitor {
     var onAppLaunched: ((String) -> Void)?
     var onAppTerminated: ((String) -> Void)?
     var onActivity: ((String) -> Void)?
+    /// Rich per-window events, for consumers that need to know *which*
+    /// window changed and how. `onActivity` still fires for every one of them.
+    var onWindowEvent: ((AppObserver.WindowEvent) -> Void)?
 
     func start() {
         let center = NSWorkspace.shared.notificationCenter
@@ -29,6 +32,7 @@ final class WorkspaceMonitor {
             object: nil, queue: .main) { [weak self] note in
                 guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
                         as? NSRunningApplication else { return }
+                self?.forgetWindows(ofPID: app.processIdentifier)
                 if let removed = self?.observers.removeValue(forKey: app.processIdentifier) {
                     self?.onAppTerminated?(removed.bundleID)
                 }
@@ -76,6 +80,27 @@ final class WorkspaceMonitor {
     private func makeObserver(for app: NSRunningApplication) -> AppObserver? {
         AppObserver(app: app, onActivity: { [weak self] bundleID in
             self?.onActivity?(bundleID)
+        }, onWindowEvent: { [weak self] event in
+            self?.record(event)
         })
+    }
+
+    /// Last frame observed for each window, so features that need a "before"
+    /// frame (resize propagation, drag sessions) have one without re-reading AX.
+    private var lastEvents: [Int: AppObserver.WindowEvent] = [:]
+
+    func lastKnownFrame(ofWindow windowID: Int) -> CGRect? {
+        lastEvents[windowID]?.frame
+    }
+
+    private func record(_ event: AppObserver.WindowEvent) {
+        lastEvents[event.windowID] = event
+        onWindowEvent?(event)
+    }
+
+    /// AX window ids never come back after their process dies, so the cache is
+    /// pruned per-app rather than growing for the life of the session.
+    private func forgetWindows(ofPID pid: pid_t) {
+        lastEvents = lastEvents.filter { $0.value.pid != pid }
     }
 }
