@@ -28,7 +28,7 @@ Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (
 
 ## Open backlog (all optional)
 
-Keychain salt storage · re-hash on demand for pre-M2d records · target-display picker · delete the install.sh transition block after a while · rename the repo directory (`~/Code/MacTLM` → `~/Code/Ferrite` — user/tooling choice) · PRD M4: README, Homebrew cask, notarization (the public-release bar; why no 1.0 yet) · Linux port: `FerriteCore` has zero AppKit imports, a Linux build needs only a new `WindowDriving` (sway/Hyprland IPC or EWMH).
+Keychain salt storage · re-hash on demand for pre-M2d records · target-display picker · delete the install.sh transition block after a while · PRD M4: README, Homebrew cask, notarization (the public-release bar; why no 1.0 yet) · Linux port: `FerriteCore` has zero AppKit imports, a Linux build needs only a new `WindowDriving` (sway/Hyprland IPC or EWMH).
 
 ## How to resume
 
