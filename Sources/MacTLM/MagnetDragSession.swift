@@ -31,6 +31,7 @@ final class MagnetDragSession {
 
     deinit {
         endDrag()
+        endResize()
     }
 
     /// Live tracing, enabled with `MACTLM_TRACE_DRAG=1`.
@@ -271,6 +272,11 @@ final class MagnetDragSession {
         else { return }
 
         let live = coordinator.liveMembers(of: group)
+        // A genuine resize of a grouped window may be scaling the whole
+        // group: open the settle-on-release session before live propagation
+        // runs, so an outer-edge drag (which propagates nothing) still ends
+        // with a settle.
+        openResize(for: event, previous: previous, live: live)
         var frames = Dictionary(live.map { ($0.window.id, $0.window.frame) },
                                 uniquingKeysWith: { first, _ in first })
         // The driver's enumeration can trail the notification by a frame.
@@ -294,6 +300,105 @@ final class MagnetDragSession {
             guard let frame = moves[member.window.id] else { continue }
             write(frame, to: member.window, bundleID: member.member.bundleID)
         }
+    }
+
+    // MARK: - Resize sessions
+
+    private struct Resize {
+        let windowID: Int
+        let bundleID: String
+        /// Frames of every live member at session start, keyed by window id —
+        /// the dragged window's is its pre-gesture frame.
+        let startFrames: [Int: CGRect]
+        /// Live members at session start, for back-to-front application.
+        let members: [PersistenceCoordinator.LiveMember]
+        let outerEdges: Set<MagnetMating.Edge>
+        let mouseUpMonitor: Any?
+    }
+    private var resize: Resize?
+
+    /// Opens the settle-on-release session for a grouped window that is being
+    /// resized by the user. Reuses the group/live resolution `handleResized`
+    /// already paid for.
+    private func openResize(for event: AppObserver.WindowEvent,
+                            previous: CGRect,
+                            live: [PersistenceCoordinator.LiveMember]) {
+        if let open = resize, open.windowID != event.windowID {
+            // Nobody resizes two windows at once, and no mouse-up arrived for
+            // the old one: dropping it is honest, settling it would not be —
+            // the mirror of the move-session rule.
+            trace("ending resize session for win=\(open.windowID): " +
+                  "a different window resized")
+            endResize()
+        }
+        // The release frame is read at mouse-up, not accumulated per event.
+        guard resize == nil else { return }
+        // Only a held left button is a user resize. Programmatic resizes never
+        // open sessions.
+        guard NSEvent.pressedMouseButtons & 1 != 0 else { return }
+        guard live.count > 1 else { return }
+        var startFrames = Dictionary(live.map { ($0.window.id, $0.window.frame) },
+                                     uniquingKeysWith: { first, _ in first })
+        // The driver's enumeration can trail the notification: the dragged
+        // window's start frame is its pre-gesture frame.
+        startFrames[event.windowID] = previous
+        let outer = MagnetScale.outerEdges(
+            of: previous,
+            among: live.filter { $0.window.id != event.windowID }
+                .map { $0.window.frame },
+            gap: Self.gap)
+        let mouseUp = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) {
+            [weak self] _ in self?.finishResize()
+        }
+        resize = Resize(windowID: event.windowID,
+                        bundleID: event.bundleID,
+                        startFrames: startFrames,
+                        members: live,
+                        outerEdges: outer,
+                        mouseUpMonitor: mouseUp)
+        trace("resize session open win=\(event.windowID) outer=\(outer)")
+    }
+
+    /// Mouse-up: the resize is over. Settle the group so it scales as one
+    /// window along the axes whose outer edges moved.
+    private func finishResize() {
+        guard let open = resize else {
+            trace("mouse-up with no open resize session")
+            return
+        }
+        endResize()
+        var releaseFrames: [Int: CGRect] = [:]
+        for member in open.members {
+            let id = member.window.id
+            releaseFrames[id] = monitor.lastKnownFrame(ofWindow: id)
+                ?? liveWindow(id: id, bundleID: member.member.bundleID)?.frame
+                ?? open.startFrames[id]
+        }
+        let moved = MagnetScale.settle(startFrames: open.startFrames,
+                                       releaseFrames: releaseFrames,
+                                       changed: open.windowID,
+                                       outerEdges: open.outerEdges)
+        guard !moved.isEmpty else {
+            trace("resize settle win=\(open.windowID): nothing to move")
+            return
+        }
+        // Deepest first, same stacking argument as live propagation. Every
+        // frame goes through write(), which suppresses its own AX echo so the
+        // settle cannot re-enter mating, propagation, or session-opening.
+        let ordered = PersistenceCoordinator.backToFront(
+            open.members.filter { moved[$0.window.id] != nil })
+        for member in ordered {
+            guard let frame = moved[member.window.id] else { continue }
+            write(frame, to: member.window, bundleID: member.member.bundleID)
+        }
+        trace("resize settle moved=\(moved.count) of=\(open.members.count)")
+    }
+
+    /// Removes the mouse-up monitor and the session. Safe to call twice, like
+    /// `endDrag`.
+    private func endResize() {
+        if let mouseUp = resize?.mouseUpMonitor { NSEvent.removeMonitor(mouseUp) }
+        resize = nil
     }
 
     // MARK: - Writing frames
