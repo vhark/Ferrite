@@ -49,6 +49,20 @@ final class PersistenceCoordinator {
         let supportDir = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Ferrite")
+        // One-shot MacTLM → Ferrite migration, BEFORE any store reads: the
+        // stores below adopt whatever is on disk at construction, so the
+        // legacy files must already be in place (finding 15: never write the
+        // store through anything but its own path handling — copy wholesale
+        // before it loads instead).
+        let migration = LegacyMigration.run(
+            oldDirectory: supportDir.deletingLastPathComponent()
+                .appendingPathComponent("MacTLM"),
+            newDirectory: supportDir,
+            oldDefaults: UserDefaults(suiteName: "dev.mactlm.MacTLM"),
+            newDefaults: .standard)
+        NSLog(migration.didAnything ? "Ferrite: migrated — %@"
+                                    : "Ferrite: migration no-op — %@",
+              migration.summary)
         store = try LayoutStore(directory: supportDir.appendingPathComponent("configurations"))
         excludeURL = supportDir.appendingPathComponent("exclude.json")
         excludeBox = ExcludeListBox(ExcludeList.load(from: excludeURL))
