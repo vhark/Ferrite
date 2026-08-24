@@ -233,17 +233,33 @@ final class MagnetDragSession {
 
     // MARK: - Resize propagation
 
+    /// Frame at each window's previous RESIZED event. The no-op guard and
+    /// propagation's `previous` must NOT read `monitor.lastKnownFrame`: an
+    /// origin-moving resize (left/top edge drag) makes AX emit a moved twin
+    /// before each resized event, and the moved twin refreshes that cache
+    /// first — so the resized event compared equal and was eaten as a no-op.
+    /// Measured live 2026-08-24: an 851pt width change classified "no-op",
+    /// which killed live propagation for origin-moving drags and made resize
+    /// sessions open only on lucky event ordering. This cache is scoped to
+    /// resized events, which is what "previous" meant all along.
+    private var lastResizedFrames: [Int: CGRect] = [:]
+
     private func handleResized(_ event: AppObserver.WindowEvent) {
-        // Measured live 2026-08-24: AX re-emits resized notifications whose
-        // frame is identical to the last one — 14 within 150ms while a window
-        // was merely being dragged. Two reasons to leave before doing anything
-        // else. Answering "which group is this?" costs an AX sweep per event,
-        // and, far worse, this handler used to end the drag session for any
-        // resized event at all: a drag was being destroyed dozens of times by
-        // resizes that resized nothing, so only the last moved events before
-        // release could establish a mate. That is why mating felt like it
-        // needed pinpoint aim.
-        guard let previous = monitor.lastKnownFrame(ofWindow: event.windowID) else { return }
+        // First resized event for a window seeds from the general cache; the
+        // moved twin may already have poisoned it to equal this event's frame,
+        // in which case this event reads as a no-op and the NEXT one carries
+        // the delta — one event's lag, self-correcting.
+        let previous = lastResizedFrames[event.windowID]
+            ?? monitor.lastKnownFrame(ofWindow: event.windowID)
+            ?? event.frame
+        // Bounded: window ids churn over weeks of daemon uptime.
+        if lastResizedFrames.count > 256 { lastResizedFrames.removeAll() }
+        lastResizedFrames[event.windowID] = event.frame
+
+        // Finding 23: AX re-emits resized notifications whose frame is
+        // identical to the previous one — 14 within 150ms during a plain
+        // drag. Leave before paying for group resolution, and never let a
+        // resize that resized nothing end the move session.
         let grew = abs(previous.width - event.frame.width) > 0.5
             || abs(previous.height - event.frame.height) > 0.5
         guard grew else {
@@ -415,6 +431,10 @@ final class MagnetDragSession {
             achieved = driver.setFrame(frame, of: window)
         }
         suppress(achieved, ofWindow: window.id)
+        // Keep the resize-scoped previous current for frames WE moved, or the
+        // next genuine event would measure its delta against a pre-settle
+        // frame and propagate a change nobody made.
+        lastResizedFrames[window.id] = achieved
         monitor.noteWrittenFrame(achieved, ofWindow: window.id,
                                  pid: window.pid, bundleID: bundleID)
     }
