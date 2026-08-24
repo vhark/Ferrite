@@ -33,14 +33,30 @@ public final class RestoreEngine {
         var placed = 0
         for window in windows {
             guard let record = assignment[window.id] else { continue }
-            let target = record.frame.rect(in: visibleArea)
-            let achieved = driver.setFrame(target, of: window)
-            if !achieved.approximatelyEquals(target, tolerance: Self.tolerance) {
-                _ = driver.setFrame(target, of: window) // one retry, then accept
-            }
+            apply(target: record.frame.rect(in: visibleArea), to: window)
             placed += 1
         }
         return placed
+    }
+
+    /// Places windows at ABSOLUTE target rects (the merged template path):
+    /// no denormalization, same clamp policy as `restore`.
+    /// Returns the number of windows a placement was attempted for.
+    @discardableResult
+    public func place(assignments: [(window: DriverWindow, target: CGRect)]) -> Int {
+        for assignment in assignments {
+            apply(target: assignment.target, to: assignment.window)
+        }
+        return assignments.count
+    }
+
+    /// THE clamp policy — set → read back → one retry → accept, never loop.
+    /// Every placement entry funnels through here; extract, don't duplicate.
+    private func apply(target: CGRect, to window: DriverWindow) {
+        let achieved = driver.setFrame(target, of: window)
+        if !achieved.approximatelyEquals(target, tolerance: Self.tolerance) {
+            _ = driver.setFrame(target, of: window) // one retry, then accept
+        }
     }
 }
 

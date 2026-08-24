@@ -61,15 +61,23 @@ public enum SnapshotPlanner {
         }
     }
 
-    private static func assign(window: Window, displays: [Display]) -> Display {
-        let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
-        if let containing = displays.first(where: { $0.visibleArea.contains(center) }) {
+    /// The area owning a rect: center containment first, else nearest center.
+    /// The one display-bucketing rule — capture (`assign`) and placement
+    /// affinity (`WindowMatcher.Affinity`) both delegate here; never fork it.
+    public static func ownerIndex(of frame: CGRect, areas: [CGRect]) -> Int? {
+        guard !areas.isEmpty else { return nil }
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        if let containing = areas.firstIndex(where: { $0.contains(center) }) {
             return containing
         }
         // Off-screen fallback: nearest display center.
-        return displays.min { a, b in
-            distanceSquared(center, to: a.visibleArea) < distanceSquared(center, to: b.visibleArea)
-        }!
+        return areas.indices.min { a, b in
+            distanceSquared(center, to: areas[a]) < distanceSquared(center, to: areas[b])
+        }
+    }
+
+    private static func assign(window: Window, displays: [Display]) -> Display {
+        displays[ownerIndex(of: window.frame, areas: displays.map(\.visibleArea))!]
     }
 
     private static func distanceSquared(_ point: CGPoint, to rect: CGRect) -> CGFloat {
