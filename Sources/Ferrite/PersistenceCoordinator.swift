@@ -37,6 +37,10 @@ final class PersistenceCoordinator {
     /// Fires after the record namespace has been swapped, so open UI can
     /// re-read instead of showing the previous configuration's records.
     var onConfigurationChanged: (() -> Void)?
+    /// Fires after any layout-library write (menu saves included), so an open
+    /// Layouts tab re-reads instead of showing a stale list — the library
+    /// sibling of `onConfigurationChanged` (finding 16).
+    var onLayoutLibraryChanged: (() -> Void)?
 
     var currentExcludedBundleIDs: Set<String> { excludeList.bundleIDs }
 
@@ -178,7 +182,7 @@ final class PersistenceCoordinator {
         guard !layouts.isEmpty else { return }
         var library = layoutLibraryStore.load()
         library.upsert(layouts)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
         refreshShortcuts()
     }
 
@@ -443,7 +447,7 @@ final class PersistenceCoordinator {
     func renameBundle(from oldName: String, to newName: String) {
         var library = layoutLibraryStore.load()
         library.renameBundle(from: oldName, to: newName)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
         LayoutShortcuts.migrate(from: oldName, to: newName)
         refreshShortcuts()
     }
@@ -453,14 +457,14 @@ final class PersistenceCoordinator {
     func archiveBundle(named name: String) {
         var library = layoutLibraryStore.load()
         library.archiveBundle(named: name)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
         refreshShortcuts()
     }
 
     func restoreBundle(named name: String) {
         var library = layoutLibraryStore.load()
         library.restoreBundle(named: name)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
         refreshShortcuts()
     }
 
@@ -468,7 +472,7 @@ final class PersistenceCoordinator {
     func deleteBundle(named name: String) {
         var library = layoutLibraryStore.load()
         library.deleteBundle(named: name)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
         LayoutShortcuts.clear(bundleName: name)
         refreshShortcuts()
     }
@@ -476,7 +480,7 @@ final class PersistenceCoordinator {
     func setStageMode(_ mode: StageMode, forBundleNamed name: String) {
         var library = layoutLibraryStore.load()
         library.setStageMode(mode, forBundleNamed: name)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
     }
 
     func loadBundles() -> [LayoutBundle] {
@@ -485,6 +489,12 @@ final class PersistenceCoordinator {
 
     func loadArchivedBundles() -> [LayoutBundle] {
         layoutLibraryStore.load().archivedBundles()
+    }
+
+    /// Single funnel for library writes: every mutation notifies open UI.
+    private func writeLibrary(_ library: LayoutLibrary) {
+        try? layoutLibraryStore.save(library)
+        onLayoutLibraryChanged?()
     }
 
     // MARK: - Preferences surface
@@ -585,13 +595,13 @@ final class PersistenceCoordinator {
     func removeEntry(atIndex index: Int, fromLayoutID layoutID: UUID) {
         var library = layoutLibraryStore.load()
         library.removeEntry(atIndex: index, fromLayoutID: layoutID)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
     }
 
     func setEntryOptional(_ optional: Bool, atIndex index: Int, inLayoutID layoutID: UUID) {
         var library = layoutLibraryStore.load()
         library.setEntryOptional(optional, atIndex: index, inLayoutID: layoutID)
-        try? layoutLibraryStore.save(library)
+        writeLibrary(library)
     }
 
     /// Re-reads the library and registers a hotkey handler per active bundle.

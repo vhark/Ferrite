@@ -226,6 +226,10 @@ final class LayoutsPreferencesModel: ObservableObject {
 
     init(coordinator: PersistenceCoordinator) {
         self.coordinator = coordinator
+        // Menu-bar saves (and every other library write) land while this
+        // window is open or cached; without the hook the list is frozen at
+        // whatever the library held when the window was first created.
+        coordinator.onLayoutLibraryChanged = { [weak self] in self?.reload() }
         reload()
     }
 
@@ -241,39 +245,34 @@ final class LayoutsPreferencesModel: ObservableObject {
         liveEntryTitles = titles
     }
 
+    // Mutations reload through the coordinator's onLayoutLibraryChanged hook,
+    // which fires synchronously on every library write — including our own.
     func rename(from oldName: String, to newName: String) {
         coordinator.renameBundle(from: oldName, to: newName)
-        reload()
     }
 
     func archive(bundleName: String) {
         coordinator.archiveBundle(named: bundleName)
-        reload()
     }
 
     func restore(bundleName: String) {
         coordinator.restoreBundle(named: bundleName)
-        reload()
     }
 
     func deletePermanently(bundleName: String) {
         coordinator.deleteBundle(named: bundleName)
-        reload()
     }
 
     func setClearStage(_ on: Bool, for bundleName: String) {
         coordinator.setStageMode(on ? .clearStage : .leaveOthers,
                                  forBundleNamed: bundleName)
-        reload()
     }
 
     func removeEntry(atIndex index: Int, fromLayoutID layoutID: UUID) {
         coordinator.removeEntry(atIndex: index, fromLayoutID: layoutID)
-        reload()
     }
 
     func setEntryOptional(_ optional: Bool, atIndex index: Int, inLayoutID layoutID: UUID) {
         coordinator.setEntryOptional(optional, atIndex: index, inLayoutID: layoutID)
-        reload()
     }
 }
