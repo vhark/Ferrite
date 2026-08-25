@@ -1,6 +1,6 @@
-# Ferrite — Session Handoff (2026-08-24, post-rename)
+# Ferrite — Session Handoff (2026-08-24, post-M4-prep)
 
-State saved at tag `v0.11.0-ferrite` on `main`. Working tree clean. 220 unit tests, 0 failures.
+State: `main`, working tree clean, three commits past tag `v0.11.0-ferrite` (README/GUIDE + MIT license, M4 release infrastructure). 220 unit tests, 0 failures.
 
 ## What Ferrite is
 
@@ -8,11 +8,11 @@ A macOS-first window layout manager (Linux next): automatic per-app position per
 
 ## Where things stand
 
-Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (`v0.1.0-m1` through `v0.11.0-ferrite` — every tag was cut only after passing its live protocol on the user's machine). 27-item platform findings list there is **authoritative** — read it before touching AX, TCC, signing, caches, event handling, or persistence.
+Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (`v0.1.0-m1` through `v0.11.0-ferrite` — every tag was cut only after passing its live protocol on the user's machine). The 26-item platform findings list there is **authoritative** — read it before touching AX, TCC, signing, caches, event handling, or persistence.
 
 - Daemon: `/Applications/Ferrite.app` (`dev.ferrite.Ferrite`), running, Launch-at-Login enabled, Accessibility granted (stale MacTLM entry removed by hand).
 - Signing: `Ferrite Dev` self-signed identity (openssl + `security import` + `add-trusted-cert -p codeSign`; keychain ACL "Always Allow" clicked — codesign is silent). Never ad-hoc sign: it re-keys TCC per build (finding 6).
-- Dev loop: `scripts/make-app.sh` → `build/Ferrite.app`; `scripts/install.sh` → `/Applications` + login item. `install.sh` still carries the one-time MacTLM transition block — harmless now, removable later.
+- Dev loop: `scripts/make-app.sh` → `build/Ferrite.app`; `scripts/install.sh` → `/Applications` + login item; `scripts/release.sh <x.y.z>` → notarized public release (runbook: `docs/RELEASING.md`). `install.sh` still carries the one-time MacTLM transition block — harmless now, removable later.
 - Gesture tracing: `FERRITE_TRACE_DRAG=1` (findings 22–26 were all diagnosed with it). Diagnostics: `--list-windows`, `--list-displays`, `--probe-frame <bundleID>`, `--login-status`, `--apply-bundle`.
 
 ## User data
