@@ -78,6 +78,7 @@ Test suite: 220 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and
 
 ## Next
 
+- **M5 candidate: snap actions (Magnet/Rectangle parity)** — hotkey + drag-to-edge placement of a single window at screen fractions (halves, quarters, thirds, maximize) with pre-snap restore; center/next-display/incremental-resize as fast-follows. Research + full parity table: `docs/superpowers/specs/2026-08-25-tiling-parity-research.md`. All machinery exists: `GroupLayoutSolver` fractional rects, KeyboardShortcuts, `MagnetSnapOverlay` previews, remembered frames for restore. Spaces switching and auto-tiling stay non-goals.
 - **M4 public release** — prep complete 2026-08-24: README + GUIDE + MIT license, issue templates, Rectangle/KeyboardShortcuts attribution, Homebrew cask (`Casks/ferrite.rb`; the app repo doubles as the tap), and `scripts/release.sh` (universal binary, hardened-runtime Developer ID signing, notarize + staple, cask bump; runbook `docs/RELEASING.md`). Blocked only on Apple Developer Program credentials; pipeline dry-run verified with `--no-notarize`. 1.0 tags when the first notarized artifact ships.
 - **Target display choice** — when a layout's display is absent we always adapt onto the main display; offer a picker.
 - **Keychain salt** — stricter storage for the window-identity salt than `UserDefaults`.

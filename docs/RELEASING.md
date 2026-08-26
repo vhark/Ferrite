@@ -7,9 +7,21 @@ operator context around it.
 
 ## One-time setup
 
-1. **Apple Developer enrollment** (paid). Notarization and Developer ID
+1. **Apple Developer enrollment** (paid, $99/yr). Notarization and Developer ID
    certificates require it; there is no free path. The App Store is not an
    option for Ferrite — the Accessibility API is incompatible with sandboxing.
+   Enrollment steps (individual, ~15 min + hours-to-2-days approval):
+   - Apple ID with two-factor auth, under the **legal name** (it appears on the
+     certificate and in Gatekeeper prompts as
+     `Developer ID Application: <Name> (TEAMID)`).
+   - [developer.apple.com/programs/enroll](https://developer.apple.com/programs/enroll/)
+     or the Apple Developer app (app route verifies identity faster via ID scan).
+   - Choose **Individual** — no D-U-N-S, no org paperwork; Team ID issued
+     automatically. Individual→org later means re-keying certificates.
+   - After the cert exists: **export a `.p12` backup of the private key** — it
+     lives only in the login keychain and a lost key means a new certificate.
+   - Keep signing dev builds with `Ferrite Dev`; only `release.sh` uses
+     Developer ID. Mixing identities churns the local Accessibility grant.
 2. **Developer ID Application certificate.** In [developer.apple.com →
    Certificates](https://developer.apple.com/account/resources/certificates/list),
    create a *Developer ID Application* certificate (Keychain Access →
