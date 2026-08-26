@@ -1,6 +1,6 @@
-# Ferrite — Session Handoff (2026-08-24, post-M4-prep)
+# Ferrite — Session Handoff (2026-08-25)
 
-State: `main`, working tree clean, three commits past tag `v0.11.0-ferrite` (README/GUIDE + MIT license, M4 release infrastructure). 220 unit tests, 0 failures.
+State: `main`, working tree clean, ahead of tag `v0.11.0-ferrite` by the M4 release infrastructure, README/GUIDE/LICENSE, and the Preferences staleness fix (finding 16 corollary, live-verified 2026-08-25). 220 unit tests, 0 failures.
 
 ## What Ferrite is
 
