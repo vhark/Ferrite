@@ -3,16 +3,28 @@ import FerriteCore
 
 /// Menu glyphs drawn by the solver itself.
 ///
-/// Each icon is `GroupLayoutSolver`'s own answer for five windows inside the
-/// glyph box, so a glyph literally depicts the arrangement clicking it produces
-/// and cannot drift out of sync with the solver.
+/// Each icon is `GroupLayoutSolver`'s own answer for a representative window
+/// count (see `tileCount(for:)`) inside the glyph box, so a glyph literally
+/// depicts the arrangement clicking it produces and cannot drift out of sync
+/// with the solver.
 enum PresetGlyph {
     static let size = CGSize(width: 44, height: 30)
 
-    /// Five tiles is the smallest count that tells every preset apart: grid
-    /// becomes 3×2, main+side gets three side tiles, and the treemap has enough
-    /// left over to show its bias.
-    private static let tileCount = 5
+    /// Five tiles for count-adaptive presets (the smallest count that tells
+    /// them all apart). Fixed-zone presets draw their true cell count so the
+    /// glyph depicts the exact division; cascade shows three staggered tiles;
+    /// monocle shows one.
+    private static func tileCount(for preset: GroupLayoutSolver.Preset) -> Int {
+        switch preset {
+        case .fixedColumns(let count): return max(1, count)
+        case .fixedGrid(let columns, let rows): return max(1, columns * rows)
+        case .cascade: return 3
+        case .monocle: return 1
+        case .columns, .rows, .grid, .mainSide, .mainSideMirrored,
+             .symmetric, .treemap, .mainCenter, .bsp:
+            return 5
+        }
+    }
 
     static func image(for preset: GroupLayoutSolver.Preset) -> NSImage {
         let image = NSImage(size: size, flipped: false) { _ in
@@ -35,10 +47,11 @@ enum PresetGlyph {
         backdrop.stroke()
 
         let box = outline.insetBy(dx: 2.5, dy: 2.5)
-        let tiles = (0..<tileCount).map { index in
+        let count = tileCount(for: preset)
+        let tiles = (0..<count).map { index in
             GroupLayoutSolver.Tile(id: index,
                                    weight: readsWeights(preset)
-                                       ? Double(tileCount - index) : 1)
+                                       ? Double(count - index) : 1)
         }
         let solved = GroupLayoutSolver.solve(tiles: tiles, preset: preset,
                                              in: box, gap: 1.5)
@@ -57,6 +70,16 @@ enum PresetGlyph {
                 NSColor.secondaryLabelColor.setFill()
             }
             NSBezierPath(roundedRect: mirrored, xRadius: 1.5, yRadius: 1.5).fill()
+        }
+
+        if case .monocle = preset {
+            // A single full tile reads as "one window"; the inner stroke says
+            // "every window, stacked".
+            let inner = box.insetBy(dx: 3, dy: 3)
+            NSColor.secondaryLabelColor.setStroke()
+            let path = NSBezierPath(roundedRect: inner, xRadius: 1.5, yRadius: 1.5)
+            path.lineWidth = 1
+            path.stroke()
         }
     }
 
