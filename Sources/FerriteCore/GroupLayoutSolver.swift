@@ -26,12 +26,14 @@ public enum GroupLayoutSolver {
         case rows
         case grid
         case mainSide
+        case mainSideMirrored
         case symmetric
         case treemap(bias: TreemapBias)
 
         /// The presets that ignore weights — used by exhaustive tests.
         public static let allBasicCases: [Preset] = [.columns, .rows, .grid,
-                                                     .mainSide, .symmetric]
+                                                     .mainSide, .mainSideMirrored,
+                                                     .symmetric]
     }
 
     public enum TreemapBias: Equatable {
@@ -61,6 +63,8 @@ public enum GroupLayoutSolver {
             raw = grid(tiles, in: bounds)
         case .mainSide:
             raw = mainSide(tiles, in: bounds)
+        case .mainSideMirrored:
+            raw = mainSideMirrored(tiles, in: bounds)
         case .symmetric:
             // PRD §3.3: symmetric is the treemap's equal-weights case.
             raw = partition(tiles.map { Tile(id: $0.id, weight: 1) }, in: bounds)
@@ -111,6 +115,23 @@ public enum GroupLayoutSolver {
         var result = [ordered[0].id: CGRect(x: bounds.minX, y: bounds.minY,
                                             width: mainWidth, height: bounds.height)]
         let sideBounds = CGRect(x: bounds.minX + mainWidth, y: bounds.minY,
+                                width: bounds.width - mainWidth, height: bounds.height)
+        for (id, rect) in strips(Array(ordered.dropFirst()), in: sideBounds,
+                                 vertical: false) {
+            result[id] = rect
+        }
+        return result
+    }
+
+    /// `mainSide` flipped: heaviest takes 60% on the right, stack on the left.
+    private static func mainSideMirrored(_ tiles: [Tile],
+                                         in bounds: CGRect) -> [Int: CGRect] {
+        let ordered = tiles.sorted { $0.weight > $1.weight }
+        let mainWidth = bounds.width * 0.6
+        var result = [ordered[0].id: CGRect(x: bounds.maxX - mainWidth,
+                                            y: bounds.minY,
+                                            width: mainWidth, height: bounds.height)]
+        let sideBounds = CGRect(x: bounds.minX, y: bounds.minY,
                                 width: bounds.width - mainWidth, height: bounds.height)
         for (id, rect) in strips(Array(ordered.dropFirst()), in: sideBounds,
                                  vertical: false) {
