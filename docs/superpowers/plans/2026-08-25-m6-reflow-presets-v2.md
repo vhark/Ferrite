@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Two unambiguous reflow glyph rows (display + group), five new built-in presets (main-center, mirrored main-side, BSP dwindle, cascade, monocle), user-defined custom presets (fixed columns, fixed X×Y grids, parameterized main-center) pinned from a new Preferences tab, and an explode-vs-keep policy for magnet groups under display reflow.
+**Goal:** Two unambiguous reflow glyph rows (display + group), five new built-in presets (main-center, mirrored main-side, BSP dwindle, cascade, monocle), user-defined custom presets (fixed columns, fixed X×Y grids, parameterized main-center) pinned from a new Preferences tab, an explode-vs-keep policy for magnet groups under display reflow, and (Task 0, independent) a `standard` group resize mode that resizes only the dragged window.
 
 **Architecture:** All new geometry is pure `GroupLayoutSolver` cases in `FerriteCore` (Linux-portable, property-tested). Custom presets and the group policy persist in a new `reflows.json` via `ReflowStore` (FerriteCore). The macOS layer splits `reflowDisplay` from `reflowGroup`, adds the policy (explode = real ungroup; keep = group bounding box as one tile, members remapped via a new pure `MagnetScale.remap`), rebuilds the menu with two wrapped glyph rows plus per-group rows, and adds a Reflows Preferences tab with a change hook (finding 16 corollary).
 
@@ -18,6 +18,247 @@
 - **Explode is a real ungroup** (default policy): membership removed via the same path as the Groups menu's Ungroup. Never leave a group whose members are scattered.
 - **Custom presets are not layouts.** They live in `reflows.json`, not `layouts.json` — a fresh store, so finding 11's decode-wipe risk does not apply.
 - Line numbers below are anchors as of `1f9b5c7`; re-read the file if it has drifted.
+
+---
+
+### Task 0: `standard` group resize mode
+
+Independent of the reflow work (M3b/M3c territory), runs first. Today a
+shared-edge drag always propagates to mates (`shrink` resizes them, `nudge`
+translates them) and an outer-edge drag scales the whole group (M3c). Users
+need a third mode where a resize affects **only the dragged window**.
+
+**Design decision, stated:** `.standard` suppresses BOTH effects — shared-edge
+propagation and the M3c proportional group settle. "Only resizes the one
+window and doesn't affect the others" means no other window moves during a
+resize, period. The window keeps its membership, so ⌘-drag cluster carry,
+reflow, and weights all still work.
+
+**Why membership survives:** `unmateIfReleasedAway` is called only from
+`finishDrag` (move gestures), never from `finishResize` — verified at
+`MagnetDragSession.swift:312,321`. So a `.standard` resize that opens a gap
+between mates does NOT dissolve the group. Consequence worth documenting: a
+*large* standard resize leaves the window no longer flush (adjacency is live
+geometry, 8pt gap + 12pt tolerance), so the next plain drag of that window
+will unmate it — correct behavior, but surprising if undocumented.
+
+**Files:**
+- Modify: `Sources/FerriteCore/MagnetGroup.swift:23-28` (ResizeMode enum)
+- Modify: `Sources/FerriteCore/MagnetResize.swift:15-60` (propagate)
+- Modify: `Sources/Ferrite/MagnetDragSession.swift` (Resize struct, `openResize` ~489-526, `finishResize` ~530-561)
+- Modify: `Sources/Ferrite/StatusMenuController.swift:168-181` (Resize mode submenu)
+- Modify: `docs/GUIDE.md` (magnet groups / resize modes section)
+- Test: `Tests/FerriteCoreTests/MagnetResizeStandardTests.swift` (create)
+- Test: `Tests/FerriteCoreTests/MagnetGroupModelTests.swift` (extend)
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `Tests/FerriteCoreTests/MagnetResizeStandardTests.swift`:
+
+```swift
+import XCTest
+@testable import FerriteCore
+
+/// `.standard` mode: a resize moves nothing but the window being resized.
+final class MagnetResizeStandardTests: XCTestCase {
+    // Two windows sharing a vertical edge with the standard 8pt gap.
+    private let left = CGRect(x: 0, y: 0, width: 500, height: 400)
+    private let right = CGRect(x: 508, y: 0, width: 500, height: 400)
+    /// Left window's right edge dragged 100pt further right.
+    private let widened = CGRect(x: 0, y: 0, width: 600, height: 400)
+
+    func testStandardModeMovesNoMates() {
+        let moves = MagnetResize.propagate(frames: [1: widened, 2: right],
+                                           changed: 1, previous: left,
+                                           mode: .standard)
+        XCTAssertTrue(moves.isEmpty)
+    }
+
+    func testStandardModeMovesNothingEvenInAChain() {
+        // Three in a row: nudge would push both, standard pushes neither.
+        let third = CGRect(x: 1016, y: 0, width: 500, height: 400)
+        let moves = MagnetResize.propagate(frames: [1: widened, 2: right, 3: third],
+                                           changed: 1, previous: left,
+                                           mode: .standard)
+        XCTAssertTrue(moves.isEmpty)
+    }
+
+    // Guards: the new switch arm must not change the siblings' behavior.
+    func testShrinkStillResizesTheMate() {
+        let moves = MagnetResize.propagate(frames: [1: widened, 2: right],
+                                           changed: 1, previous: left,
+                                           mode: .shrink)
+        XCTAssertEqual(moves.count, 1)
+        let mate = try! XCTUnwrap(moves[2])
+        XCTAssertLessThan(mate.width, right.width)   // resized, far edge anchored
+        XCTAssertEqual(mate.maxX, right.maxX, accuracy: 0.01)
+    }
+
+    func testNudgeStillTranslatesTheMate() {
+        let moves = MagnetResize.propagate(frames: [1: widened, 2: right],
+                                           changed: 1, previous: left,
+                                           mode: .nudge)
+        let mate = try! XCTUnwrap(moves[2])
+        XCTAssertEqual(mate.width, right.width, accuracy: 0.01)  // size kept
+        XCTAssertGreaterThan(mate.minX, right.minX)              // translated
+    }
+}
+```
+
+Append to `Tests/FerriteCoreTests/MagnetGroupModelTests.swift` (match the
+file's existing member-construction style; `MagnetMember(bundleID:slot:weight:)`
+with `weight` defaulted):
+
+```swift
+    func testStandardResizeModeRoundTrips() throws {
+        let group = MagnetGroup(
+            members: [MagnetMember(bundleID: "com.a", slot: 0),
+                      MagnetMember(bundleID: "com.b", slot: 0)],
+            resizeMode: .standard)
+        let data = try JSONEncoder().encode(group)
+        let back = try JSONDecoder().decode(MagnetGroup.self, from: data)
+        XCTAssertEqual(back.resizeMode, .standard)
+    }
+
+    func testDefaultResizeModeIsStillShrink() {
+        let group = MagnetGroup(
+            members: [MagnetMember(bundleID: "com.a", slot: 0),
+                      MagnetMember(bundleID: "com.b", slot: 0)])
+        XCTAssertEqual(group.resizeMode, .shrink)
+    }
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `swift test --filter MagnetResizeStandard 2>&1 | tail -5`
+Expected: compile FAILURE — `type 'MagnetGroup.ResizeMode' has no member 'standard'`.
+
+- [ ] **Step 3: Implement**
+
+`MagnetGroup.swift`, the enum (lines 23-28):
+
+```swift
+    public enum ResizeMode: String, Codable {
+        /// The mate resizes so the shared edge stays shared.
+        case shrink
+        /// The mate keeps its size and translates, possibly pushing its own mates.
+        case nudge
+        /// Nothing but the resized window moves: no shared-edge propagation
+        /// and no proportional group settle. Membership survives — the group
+        /// still carries, reflows and weighs as one.
+        case standard
+    }
+```
+
+`MagnetResize.propagate`, immediately after the `frames[changed]` guard
+(line 22) — earliest possible exit, before any edge work:
+
+```swift
+        guard let now = frames[changed] else { return [:] }
+        // Standard mode: the user resized one window and meant only that one.
+        guard mode != .standard else { return [:] }
+```
+
+And the mode switch (lines 42-48) gains the case so it stays exhaustive
+without a default:
+
+```swift
+                    switch mode {
+                    case .shrink:
+                        updated = edge.resizingMate(frame, toFollow: step.now,
+                                                    gap: gap, minimumSize: minimumSize)
+                    case .nudge:
+                        updated = edge.translatingMate(frame, by: delta)
+                    case .standard:
+                        // Unreachable — the early guard returns first. Kept so
+                        // adding a mode can never silently fall through here.
+                        continue
+                    }
+```
+
+`MagnetDragSession.swift` — the session captures the mode at open time
+(at-rest state, finding 26's spirit) rather than re-resolving on release:
+
+1. Add to the `Resize` struct's stored properties (alongside `outerEdges`):
+
+```swift
+        let resizeMode: MagnetGroup.ResizeMode
+```
+
+2. `openResize` gains a parameter and passes it through. Its caller
+   (`handleResized`, which already has `group` in scope — it reads
+   `group.resizeMode` for live propagation around line 455) passes
+   `group.resizeMode`:
+
+```swift
+    private func openResize(for event: AppObserver.WindowEvent,
+                            /* existing parameters unchanged */
+                            resizeMode: MagnetGroup.ResizeMode,
+                            live: [PersistenceCoordinator.LiveMember]) {
+```
+
+```swift
+        resize = Resize(windowID: event.windowID,
+                        bundleID: event.bundleID,
+                        startFrames: startFrames,
+                        members: live,
+                        outerEdges: outer,
+                        resizeMode: resizeMode,
+                        mouseUpMonitor: mouseUp)
+```
+
+3. `finishResize` skips the M3c settle in standard mode — insert directly
+   after `endResize()` (line 535):
+
+```swift
+        guard open.resizeMode != .standard else {
+            trace("resize settle win=\(open.windowID): standard mode, group untouched")
+            return
+        }
+```
+
+`StatusMenuController.swift`, the `choices` array (lines 170-173):
+
+```swift
+        let choices: [(title: String, mode: MagnetGroup.ResizeMode, action: Selector)] = [
+            ("Standard", .standard, #selector(setGroupModeStandard(_:))),
+            ("Shrink", .shrink, #selector(setGroupModeShrink(_:))),
+            ("Nudge", .nudge, #selector(setGroupModeNudge(_:))),
+        ]
+```
+
+And the action, beside `setGroupModeShrink` (line 259):
+
+```swift
+    @objc private func setGroupModeStandard(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator.setResizeMode(.standard, ofGroup: id)
+    }
+```
+
+- [ ] **Step 4: Run the full suite**
+
+Run: `swift build 2>&1 | tail -3 && swift test 2>&1 | grep -E "Executed [0-9]+ tests" | tail -1`
+Expected: build complete; tests PASS with 6 more than before (4 new + 2
+model tests). Any other exhaustive `switch` over `ResizeMode` that fails to
+compile must gain an explicit `.standard` arm — never a `default`.
+
+- [ ] **Step 5: Document**
+
+In `docs/GUIDE.md`'s magnet-groups resize-mode explanation, add Standard as
+the first of three modes: "**Standard** — only the window you resize changes;
+mates stay exactly where they are. The group still carries with ⌘-drag,
+reflows, and keeps its weights. Note that pulling a window well clear of its
+mates this way leaves it no longer touching them, so the next time you *drag*
+it, it leaves the group (adjacency is live geometry)." Keep the existing
+Shrink and Nudge descriptions.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -A
+git commit -m "feat(magnets): standard resize mode - resize one window, leave mates alone"
+```
 
 ---
 
@@ -1706,7 +1947,12 @@ Expected: daemon restarts on the new build; Accessibility grant survives
    occupies one cell with its formation intact and still appears in Groups.
 6. **Group row + submenu row** both reflow only the group, inside its own
    bounding box; `lastGroupPreset` reapply (Grow frontmost) still works after.
-7. Record results (and any live-found defects, fixed and re-verified) in
+7. **Standard resize mode (Task 0):** set a group to Standard, drag a shared
+   edge — only that window changes, mates do not move. Drag an outer edge —
+   the group does not scale either. Switch to Shrink and Nudge and confirm
+   both still behave as before. The group still ⌘-drag carries and reflows
+   while in Standard.
+8. Record results (and any live-found defects, fixed and re-verified) in
    BACKLOG per convention; complete Step 2's shipped-table move.
 
 - [ ] **Step 5: Tag and push**
