@@ -27,6 +27,7 @@ public enum GroupLayoutSolver {
         case grid
         case mainSide
         case mainSideMirrored
+        case mainCenter(fraction: Double, sideCapacity: Int?)
         case symmetric
         case treemap(bias: TreemapBias)
 
@@ -65,6 +66,9 @@ public enum GroupLayoutSolver {
             raw = mainSide(tiles, in: bounds)
         case .mainSideMirrored:
             raw = mainSideMirrored(tiles, in: bounds)
+        case .mainCenter(let fraction, let sideCapacity):
+            raw = mainCenter(tiles, in: bounds, fraction: fraction,
+                             sideCapacity: sideCapacity)
         case .symmetric:
             // PRD §3.3: symmetric is the treemap's equal-weights case.
             raw = partition(tiles.map { Tile(id: $0.id, weight: 1) }, in: bounds)
@@ -136,6 +140,54 @@ public enum GroupLayoutSolver {
         for (id, rect) in strips(Array(ordered.dropFirst()), in: sideBounds,
                                  vertical: false) {
             result[id] = rect
+        }
+        return result
+    }
+
+    /// Heaviest tile centered at `fraction` of the width; the remainder splits
+    /// into two equal side columns. Remaining tiles deal alternately
+    /// (2nd → left, 3rd → right, …); `sideCapacity` caps each stack's cell
+    /// count, spill cycles back through the cells z-stacked. Zones are fixed:
+    /// the main tile stays centered even when one side is empty.
+    private static func mainCenter(_ tiles: [Tile], in bounds: CGRect,
+                                   fraction: Double,
+                                   sideCapacity: Int?) -> [Int: CGRect] {
+        let ordered = tiles.sorted { lhs, rhs in
+            lhs.weight == rhs.weight ? lhs.id < rhs.id : lhs.weight > rhs.weight
+        }
+        guard let main = ordered.first else { return [:] }
+        let clamped = CGFloat(min(max(fraction, 0.2), 0.9))
+        let mainWidth = bounds.width * clamped
+        let sideWidth = (bounds.width - mainWidth) / 2
+        var result = [main.id: CGRect(x: bounds.minX + sideWidth, y: bounds.minY,
+                                      width: mainWidth, height: bounds.height)]
+        var left: [Tile] = []
+        var right: [Tile] = []
+        for (index, tile) in ordered.dropFirst().enumerated() {
+            if index.isMultiple(of: 2) { left.append(tile) } else { right.append(tile) }
+        }
+        let leftBox = CGRect(x: bounds.minX, y: bounds.minY,
+                             width: sideWidth, height: bounds.height)
+        let rightBox = CGRect(x: bounds.minX + sideWidth + mainWidth, y: bounds.minY,
+                              width: sideWidth, height: bounds.height)
+        result.merge(sideStack(left, in: leftBox, capacity: sideCapacity)) { a, _ in a }
+        result.merge(sideStack(right, in: rightBox, capacity: sideCapacity)) { a, _ in a }
+        return result
+    }
+
+    /// Vertical stack of at most `capacity` cells (nil = one cell per tile).
+    /// Tiles beyond the cell count cycle back through the cells.
+    private static func sideStack(_ tiles: [Tile], in box: CGRect,
+                                  capacity: Int?) -> [Int: CGRect] {
+        guard !tiles.isEmpty else { return [:] }
+        let cells = max(1, min(capacity ?? tiles.count, tiles.count))
+        let cellHeight = box.height / CGFloat(cells)
+        var result: [Int: CGRect] = [:]
+        for (index, tile) in tiles.enumerated() {
+            let cell = index % cells
+            result[tile.id] = CGRect(x: box.minX,
+                                     y: box.minY + cellHeight * CGFloat(cell),
+                                     width: box.width, height: cellHeight)
         }
         return result
     }

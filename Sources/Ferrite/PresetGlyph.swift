@@ -64,7 +64,7 @@ enum PresetGlyph {
     /// their glyph shows the true division rather than a fake gradient of sizes.
     private static func readsWeights(_ preset: GroupLayoutSolver.Preset) -> Bool {
         switch preset {
-        case .treemap, .mainSide, .mainSideMirrored: return true
+        case .treemap, .mainSide, .mainSideMirrored, .mainCenter: return true
         case .columns, .rows, .grid, .symmetric: return false
         }
     }
