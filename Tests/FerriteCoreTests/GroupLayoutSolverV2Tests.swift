@@ -71,6 +71,9 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         // Two tiles per side → each half the height.
         XCTAssertEqual(result[1]!.height, 400, accuracy: 0.01)
         XCTAssertEqual(result[3]!.minY, 450, accuracy: 0.01)
+        // The right stack's vertical order is pinned too, not just the left's.
+        XCTAssertEqual(result[2]!.minY, 50, accuracy: 0.01)
+        XCTAssertEqual(result[4]!.minY, 450, accuracy: 0.01)
     }
 
     func testMainCenterUsersFraction() {
@@ -82,6 +85,7 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         XCTAssertEqual(result[0]!.width, 1200 * 0.66, accuracy: 0.01)
         XCTAssertEqual(result[1]!.width, 1200 * 0.17, accuracy: 0.01)
         XCTAssertEqual(result[2]!.width, 1200 * 0.17, accuracy: 0.01)
+        XCTAssertEqual(result[1]!.height, 800, accuracy: 0.01)  // capacity is a cap, not a quota
     }
 
     func testMainCenterCapacityCapsAndCycles() {
@@ -153,6 +157,8 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         // Stagger is uniform and every tile stays inside bounds.
         let step = result[1]!.minX - result[2]!.minX
         XCTAssertEqual(result[0]!.minX - result[1]!.minX, step, accuracy: 0.01)
+        XCTAssertEqual(result[1]!.minY - result[2]!.minY, step, accuracy: 0.01)
+        XCTAssertEqual(result[0]!.minY, 130, accuracy: 0.01)   // 50 + 40 * 2
         XCTAssertLessThanOrEqual(result[0]!.maxX, bounds.maxX + 0.01)
         XCTAssertLessThanOrEqual(result[0]!.maxY, bounds.maxY + 0.01)
     }
@@ -222,6 +228,8 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
                                              preset: .fixedGrid(columns: 2, rows: 2),
                                              in: bounds, gap: 0)
         XCTAssertEqual(result[4], result[0])
+        // Cycling is on cols * rows, not cols: tile 2 opens the second row.
+        XCTAssertEqual(result[2]!.minY, 450, accuracy: 0.01)
     }
 
     func testFixedGridSecondRowPlacement() {
@@ -231,5 +239,54 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         // Tile 3 starts row two.
         XCTAssertEqual(result[3]!.minX, 100, accuracy: 0.01)
         XCTAssertEqual(result[3]!.minY, 450, accuracy: 0.01)
+    }
+
+    // MARK: - Order invariance
+
+    func testOrderBasedPresetsIgnoreWeights() {
+        // Placement is driven by the caller's front-to-back order, never weight —
+        // reversing the weights must not move a single tile.
+        let ascending = (0..<4).map { GroupLayoutSolver.Tile(id: $0, weight: Double($0 + 1)) }
+        for preset in [GroupLayoutSolver.Preset.bsp, .cascade,
+                       .fixedColumns(3), .fixedGrid(columns: 2, rows: 2)] {
+            XCTAssertEqual(
+                GroupLayoutSolver.solve(tiles: ascending, preset: preset, in: bounds, gap: 0),
+                GroupLayoutSolver.solve(tiles: evenTiles(4), preset: preset, in: bounds, gap: 0),
+                "\(preset) reordered by weight")
+        }
+    }
+
+    // MARK: - Sort, clamps and guards
+
+    func testMainCenterCentersHeaviestNotFirst() {
+        let tiles = [GroupLayoutSolver.Tile(id: 0, weight: 1),
+                     GroupLayoutSolver.Tile(id: 1, weight: 9),
+                     GroupLayoutSolver.Tile(id: 2, weight: 1)]   // ids 0 and 2 tie → id wins
+        let result = GroupLayoutSolver.solve(
+            tiles: tiles, preset: .mainCenter(fraction: 0.6, sideCapacity: nil),
+            in: bounds, gap: 0)
+        XCTAssertEqual(result[1]!.minX, 340, accuracy: 0.01)    // heaviest centered
+        XCTAssertEqual(result[0]!.minX, 100, accuracy: 0.01)    // tie-break: id 0 dealt left
+        XCTAssertEqual(result[2]!.minX, 1060, accuracy: 0.01)
+    }
+
+    func testMainCenterClampsFraction() {
+        for (fraction, expected) in [(0.05, 240.0), (1.5, 1080.0)] {   // 1200 * 0.2, * 0.9
+            let result = GroupLayoutSolver.solve(
+                tiles: rankedTiles(3), preset: .mainCenter(fraction: fraction, sideCapacity: nil),
+                in: bounds, gap: 0)
+            XCTAssertEqual(result[0]!.width, expected, accuracy: 0.01)
+        }
+    }
+
+    func testFixedZonesTreatNonPositiveCountsAsOne() {
+        // Without the max(1, ...) guards `index % 0` is a fatal trap, not a NaN.
+        let cols = GroupLayoutSolver.solve(tiles: evenTiles(2), preset: .fixedColumns(0),
+                                           in: bounds, gap: 0)
+        XCTAssertEqual(cols[0]!.width, 1200, accuracy: 0.01)
+        let grid = GroupLayoutSolver.solve(tiles: evenTiles(2),
+                                           preset: .fixedGrid(columns: 0, rows: -1),
+                                           in: bounds, gap: 0)
+        XCTAssertEqual(grid[1], grid[0])   // single cell, second tile z-stacks onto it
     }
 }

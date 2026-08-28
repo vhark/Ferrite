@@ -236,10 +236,12 @@ public enum GroupLayoutSolver {
             .merging([first.id: head]) { a, _ in a }
     }
 
-    /// Classic floating-Mac cascade: every tile 70% of the box, staggered
-    /// diagonally. Backmost tile at the top-left, frontmost deepest toward the
-    /// bottom-right (and on top once the caller writes front-to-back). The
-    /// step is sized so the last tile still fits, capped at 40pt.
+    /// Classic floating-Mac cascade: every tile sized to 70% of the box,
+    /// staggered diagonally. Backmost tile at the top-left, frontmost deepest
+    /// toward the bottom-right (and on top once the caller writes
+    /// front-to-back). The step is sized so the last tile still fits, capped
+    /// at 40pt. Never reached for a lone tile: `solve` short-circuits a single
+    /// tile to the full bounds, so one window cascades to 100%, not 70%.
     private static func cascade(_ tiles: [Tile], in bounds: CGRect) -> [Int: CGRect] {
         let tileSize = CGSize(width: bounds.width * 0.7, height: bounds.height * 0.7)
         let free = CGSize(width: bounds.width - tileSize.width,
@@ -260,7 +262,9 @@ public enum GroupLayoutSolver {
     /// `count` fixed-width column zones. Tiles fill left-to-right and wrap
     /// into new rows within their column (tile i → column i % count); a
     /// column splits its height evenly among its own tiles. Columns beyond
-    /// the tile count stay empty — zones are fixed, never stretched.
+    /// the tile count stay empty — zones are fixed, never stretched. The
+    /// exception is a lone tile, which `solve` short-circuits to the full
+    /// bounds before reaching here.
     private static func fixedColumns(_ tiles: [Tile], in bounds: CGRect,
                                      count: Int) -> [Int: CGRect] {
         let columns = max(1, count)
@@ -284,7 +288,9 @@ public enum GroupLayoutSolver {
 
     /// Fixed `columns × rows` zones (FancyZones semantics). Tiles fill cells
     /// row-major front-to-back; fewer tiles leave trailing cells empty, more
-    /// tiles cycle back through the cells z-stacked. Cells never stretch.
+    /// tiles cycle back through the cells z-stacked. Cells never stretch —
+    /// except that a lone tile never gets here at all, because `solve`
+    /// short-circuits a single tile to the full bounds.
     private static func fixedGrid(_ tiles: [Tile], in bounds: CGRect,
                                   columns: Int, rows: Int) -> [Int: CGRect] {
         let cols = max(1, columns)
