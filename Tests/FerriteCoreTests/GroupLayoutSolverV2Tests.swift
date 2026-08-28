@@ -102,4 +102,29 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         XCTAssertEqual(result[1]!.minX, 100, accuracy: 0.01)
         XCTAssertEqual(result[1]!.height, 800, accuracy: 0.01)
     }
+
+    // MARK: - bsp
+
+    func testBspAlternatesVerticalThenHorizontal() {
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(4), preset: .bsp,
+                                             in: bounds, gap: 0)
+        // Tile 0: left half. Tile 1: top half of the right half.
+        // Tile 2: left half of the remaining quarter. Tile 3: the rest.
+        XCTAssertEqual(result[0]!, CGRect(x: 100, y: 50, width: 600, height: 800))
+        XCTAssertEqual(result[1]!, CGRect(x: 700, y: 50, width: 600, height: 400))
+        XCTAssertEqual(result[2]!, CGRect(x: 700, y: 450, width: 300, height: 400))
+        XCTAssertEqual(result[3]!, CGRect(x: 1000, y: 450, width: 300, height: 400))
+    }
+
+    func testBspPlacementFollowsTileOrder() {
+        // Front-to-back in = spiral order out: earlier tiles get bigger cells.
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(5), preset: .bsp,
+                                             in: bounds, gap: 0)
+        let areas = (0..<5).map { result[$0]!.width * result[$0]!.height }
+        for i in 0..<(areas.count - 2) {
+            XCTAssertGreaterThanOrEqual(areas[i], areas[i + 1])
+        }
+        // The last two cells share the final split, so they tie.
+        XCTAssertEqual(areas[3], areas[4], accuracy: 0.01)
+    }
 }

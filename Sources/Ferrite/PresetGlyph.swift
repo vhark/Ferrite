@@ -65,7 +65,7 @@ enum PresetGlyph {
     private static func readsWeights(_ preset: GroupLayoutSolver.Preset) -> Bool {
         switch preset {
         case .treemap, .mainSide, .mainSideMirrored, .mainCenter: return true
-        case .columns, .rows, .grid, .symmetric: return false
+        case .columns, .rows, .grid, .symmetric, .bsp: return false
         }
     }
 }

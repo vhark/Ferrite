@@ -30,11 +30,12 @@ public enum GroupLayoutSolver {
         case mainCenter(fraction: Double, sideCapacity: Int?)
         case symmetric
         case treemap(bias: TreemapBias)
+        case bsp
 
         /// The presets that ignore weights — used by exhaustive tests.
         public static let allBasicCases: [Preset] = [.columns, .rows, .grid,
                                                      .mainSide, .mainSideMirrored,
-                                                     .symmetric]
+                                                     .symmetric, .bsp]
     }
 
     public enum TreemapBias: Equatable {
@@ -74,6 +75,8 @@ public enum GroupLayoutSolver {
             raw = partition(tiles.map { Tile(id: $0.id, weight: 1) }, in: bounds)
         case .treemap(let bias):
             raw = treemap(tiles, in: bounds, bias: bias)
+        case .bsp:
+            raw = bsp(tiles, in: bounds, vertical: true)
         }
         return clamp(raw.mapValues { applyGap($0, gap: gap, bounds: bounds) },
                      to: minimumSize, bounds: bounds)
@@ -190,6 +193,35 @@ public enum GroupLayoutSolver {
                                      width: box.width, height: cellHeight)
         }
         return result
+    }
+
+    /// Dwindle spiral: the first tile takes half of the box, the rest recurse
+    /// into the other half with the split axis flipped — Hyprland's default
+    /// layout. Splits are even 50/50 in v1 (weighted ratios are a deferred
+    /// extension). Tile order in = spiral order out, and because callers pass
+    /// tiles front-to-back that means the frontmost window gets the biggest
+    /// cell without this needing to sort by weight.
+    private static func bsp(_ tiles: [Tile], in bounds: CGRect,
+                            vertical: Bool) -> [Int: CGRect] {
+        guard let first = tiles.first else { return [:] }
+        guard tiles.count > 1 else { return [first.id: bounds] }
+        let head: CGRect
+        let tail: CGRect
+        if vertical {
+            let cut = bounds.width / 2
+            head = CGRect(x: bounds.minX, y: bounds.minY,
+                          width: cut, height: bounds.height)
+            tail = CGRect(x: bounds.minX + cut, y: bounds.minY,
+                          width: bounds.width - cut, height: bounds.height)
+        } else {
+            let cut = bounds.height / 2
+            head = CGRect(x: bounds.minX, y: bounds.minY,
+                          width: bounds.width, height: cut)
+            tail = CGRect(x: bounds.minX, y: bounds.minY + cut,
+                          width: bounds.width, height: bounds.height - cut)
+        }
+        return bsp(Array(tiles.dropFirst()), in: tail, vertical: !vertical)
+            .merging([first.id: head]) { a, _ in a }
     }
 
     // MARK: - Weighted presets (Task 2 / Task 3)
