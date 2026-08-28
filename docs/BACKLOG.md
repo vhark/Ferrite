@@ -100,7 +100,7 @@ Test suite: 253 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and
 | Keep-mode reflow of a group straddling two displays | Only the on-display members collapse into the cell; formation breaks across the seam | Membership survives; reflowing the group itself restores its shape |
 | Explode-mode reflow dissolves a group having any member on the reflowed display | Membership lost for windows that may sit on another display | Deliberate: one member torn out already breaks the formation, and stale membership with broken adjacency is the documented footgun (finding 16's neighbourhood) |
 | `reflows.json` drops unknown keys on save | A newer Ferrite's fields are lost if an older build saves the file | Bounded to not-yet-known fields; known fields always survive, which is what the absent-tolerant decode guarantees (finding 11) |
-| A single window reflows to the full area regardless of preset | A lone window ignores Grid/Cascade zone semantics | `solve` short-circuits one tile to the whole bounds before any preset runs; a lone window filling its display is the desired behavior |
+| Keep-mode reflow of a display holding nothing but one magnet group | The group scales up to fill the whole display, whatever preset was clicked | The mixed tile set has one tile, and `solve` short-circuits a single tile to the whole bounds before any preset runs. Preset-independent by construction; a lone group filling its display is the desired behavior. (A lone *ungrouped* window is never reflowed at all — `applyToDisplay` guards `members.count > 1`.) |
 
 ## Linux port (post-M2)
 
