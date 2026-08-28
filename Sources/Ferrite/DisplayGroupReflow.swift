@@ -43,17 +43,30 @@ struct DisplayGroupReflow {
         return moved
     }
 
-    /// Reflows every eligible window on the active display, returning how many
-    /// were written. `keepGroups` picks the magnet-group policy: false places
-    /// every window individually; true collapses each intact group into a
-    /// single tile and carries its formation into the assigned cell.
+    /// What a display reflow actually did. The written ids let the caller scope
+    /// follow-up work (the explode policy's dissolve) to groups this reflow
+    /// genuinely touched, instead of every group that happens to exist.
+    struct DisplayOutcome {
+        let written: Int
+        let writtenWindowIDs: Set<Int>
+    }
+
+    /// Reflows every eligible window on the active display, reporting what it
+    /// wrote. `keepGroups` picks the magnet-group policy: false places every
+    /// window individually; true collapses each intact group into a single
+    /// tile and carries its formation into the assigned cell.
     func applyToDisplay(_ preset: GroupLayoutSolver.Preset,
                         keepGroups: Bool,
                         gap: CGFloat = 8,
-                        minimumSize: CGSize = CGSize(width: 240, height: 160)) -> Int {
-        guard let display = targetDisplay() else { return 0 }
+                        minimumSize: CGSize = CGSize(width: 240, height: 160))
+    -> DisplayOutcome {
+        guard let display = targetDisplay() else {
+            return DisplayOutcome(written: 0, writtenWindowIDs: [])
+        }
         let members = eligibleWindows(on: display)
-        guard members.count > 1 else { return 0 }
+        guard members.count > 1 else {
+            return DisplayOutcome(written: 0, writtenWindowIDs: [])
+        }
         guard keepGroups else {
             return placeIndividually(members, preset: preset,
                                      in: display.visibleArea,
@@ -96,7 +109,7 @@ struct DisplayGroupReflow {
         let solved = GroupLayoutSolver.solve(tiles: tiles, preset: preset,
                                              in: display.visibleArea, gap: gap,
                                              minimumSize: minimumSize)
-        var moved = 0
+        var written = Set<Int>()
         // Back-to-front so the frontmost window ends up on top. A group is
         // written when its tile-owning frontmost member comes up; its deeper
         // members are skipped until then.
@@ -115,14 +128,14 @@ struct DisplayGroupReflow {
                 for sibling in grouped.reversed() {
                     guard let cell = remapped[sibling.window.id] else { continue }
                     write(cell, to: sibling.window)
-                    moved += 1
+                    written.insert(sibling.window.id)
                 }
             } else if let window = soloTiles[member.window.id] {
                 write(target, to: window)
-                moved += 1
+                written.insert(window.id)
             }
         }
-        return moved
+        return DisplayOutcome(written: written.count, writtenWindowIDs: written)
     }
 
     /// Every window its own tile, weighted by stacking order.
@@ -130,7 +143,7 @@ struct DisplayGroupReflow {
                                    preset: GroupLayoutSolver.Preset,
                                    in area: CGRect,
                                    gap: CGFloat,
-                                   minimumSize: CGSize) -> Int {
+                                   minimumSize: CGSize) -> DisplayOutcome {
         // Frontmost (lowest z index) is heaviest.
         let tiles = members.enumerated().map { index, member in
             GroupLayoutSolver.Tile(id: member.window.id,
@@ -139,14 +152,14 @@ struct DisplayGroupReflow {
         let solved = GroupLayoutSolver.solve(tiles: tiles, preset: preset,
                                             in: area, gap: gap,
                                             minimumSize: minimumSize)
-        var moved = 0
+        var written = Set<Int>()
         // Apply back-to-front so the frontmost window ends up on top.
         for member in members.reversed() {
             guard let target = solved[member.window.id] else { continue }
             write(target, to: member.window)
-            moved += 1
+            written.insert(member.window.id)
         }
-        return moved
+        return DisplayOutcome(written: written.count, writtenWindowIDs: written)
     }
 
     /// Same clamp policy as RestoreEngine: set, read back, one retry, then

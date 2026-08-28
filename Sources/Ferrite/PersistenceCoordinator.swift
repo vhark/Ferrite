@@ -212,10 +212,11 @@ final class PersistenceCoordinator {
                                         excludedBundleIDs: currentExcludedBundleIDs,
                                         coordinator: self)
         let keep = reflowStore.load().keepGroupsOnDisplayReflow
-        let moved = reflow.applyToDisplay(preset, keepGroups: keep)
-        if !keep { dissolveGroupsTouchedByDisplayReflow() }
-        NSLog("Ferrite: display reflow %@ moved %d windows (%@ groups)",
-              String(describing: preset), moved, keep ? "kept" : "exploded")
+        let outcome = reflow.applyToDisplay(preset, keepGroups: keep)
+        let dissolved = keep ? 0 : dissolveGroups(scatteredAmong: outcome.writtenWindowIDs)
+        NSLog("Ferrite: display reflow %@ moved %d windows (%@ groups, %d dissolved)",
+              String(describing: preset), outcome.written,
+              keep ? "kept" : "exploded", dissolved)
     }
 
     /// Reflows exactly one group inside its own bounding box.
@@ -232,15 +233,25 @@ final class PersistenceCoordinator {
               String(describing: preset), moved)
     }
 
-    /// Explode policy: every group that just had two or more windows scattered
-    /// loses its membership entirely, reusing the same path as the Groups
-    /// menu's Ungroup. Never leave a group whose members no longer touch —
-    /// stale membership with broken adjacency is a documented footgun.
-    private func dissolveGroupsTouchedByDisplayReflow() {
+    /// Explode policy: a group whose windows this reflow actually scattered
+    /// loses its membership, reusing the Groups menu's own ungroup path
+    /// (finding 20). Never leave a group whose members no longer touch —
+    /// stale membership with broken adjacency is a documented footgun. But a
+    /// group the reflow never touched — one living on another display, say —
+    /// is left completely alone: never discard user work the operation did not
+    /// affect (finding 18). Returns how many groups it dissolved.
+    private func dissolveGroups(scatteredAmong writtenWindowIDs: Set<Int>) -> Int {
+        var dissolved = 0
         // A snapshot: `ungroup` rewrites the tracker's array on every call.
-        for group in magnetGroups() where liveMembers(of: group).count > 1 {
+        for group in magnetGroups() {
+            let touched = liveMembers(of: group).contains {
+                writtenWindowIDs.contains($0.window.id)
+            }
+            guard touched else { continue }
             ungroup(group.id)
+            dissolved += 1
         }
+        return dissolved
     }
 
     // MARK: - Magnet groups
