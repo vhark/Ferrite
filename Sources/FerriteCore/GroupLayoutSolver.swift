@@ -31,6 +31,8 @@ public enum GroupLayoutSolver {
         case symmetric
         case treemap(bias: TreemapBias)
         case bsp
+        case cascade
+        case monocle
 
         /// The presets that ignore weights — used by exhaustive tests.
         public static let allBasicCases: [Preset] = [.columns, .rows, .grid,
@@ -77,6 +79,10 @@ public enum GroupLayoutSolver {
             raw = treemap(tiles, in: bounds, bias: bias)
         case .bsp:
             raw = bsp(tiles, in: bounds, vertical: true)
+        case .cascade:
+            raw = cascade(tiles, in: bounds)
+        case .monocle:
+            raw = Dictionary(uniqueKeysWithValues: tiles.map { ($0.id, bounds) })
         }
         return clamp(raw.mapValues { applyGap($0, gap: gap, bounds: bounds) },
                      to: minimumSize, bounds: bounds)
@@ -222,6 +228,27 @@ public enum GroupLayoutSolver {
         }
         return bsp(Array(tiles.dropFirst()), in: tail, vertical: !vertical)
             .merging([first.id: head]) { a, _ in a }
+    }
+
+    /// Classic floating-Mac cascade: every tile 70% of the box, staggered
+    /// diagonally. Backmost tile at the top-left, frontmost deepest toward the
+    /// bottom-right (and on top once the caller writes front-to-back). The
+    /// step is sized so the last tile still fits, capped at 40pt.
+    private static func cascade(_ tiles: [Tile], in bounds: CGRect) -> [Int: CGRect] {
+        let tileSize = CGSize(width: bounds.width * 0.7, height: bounds.height * 0.7)
+        let free = CGSize(width: bounds.width - tileSize.width,
+                          height: bounds.height - tileSize.height)
+        let count = tiles.count
+        let step: CGFloat = count > 1
+            ? min(40, min(free.width, free.height) / CGFloat(count - 1))
+            : 0
+        var result: [Int: CGRect] = [:]
+        for (index, tile) in tiles.enumerated() {
+            let offset = step * CGFloat(count - 1 - index)
+            result[tile.id] = CGRect(x: bounds.minX + offset, y: bounds.minY + offset,
+                                     width: tileSize.width, height: tileSize.height)
+        }
+        return result
     }
 
     // MARK: - Weighted presets (Task 2 / Task 3)

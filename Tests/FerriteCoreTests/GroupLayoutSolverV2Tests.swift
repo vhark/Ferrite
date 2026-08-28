@@ -135,4 +135,41 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         // The last two cells share the final split, so they tie.
         XCTAssertEqual(areas[3], areas[4], accuracy: 0.01)
     }
+
+    // MARK: - cascade
+
+    func testCascadeStaggersBackToFront() {
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(3), preset: .cascade,
+                                             in: bounds, gap: 0)
+        // All tiles 70% of bounds.
+        for rect in result.values {
+            XCTAssertEqual(rect.width, 840, accuracy: 0.01)
+            XCTAssertEqual(rect.height, 560, accuracy: 0.01)
+        }
+        // Frontmost (id 0) sits deepest toward bottom-right; backmost at origin.
+        XCTAssertEqual(result[2]!.origin, CGPoint(x: 100, y: 50))
+        XCTAssertGreaterThan(result[1]!.minX, result[2]!.minX)
+        XCTAssertGreaterThan(result[0]!.minX, result[1]!.minX)
+        // Stagger is uniform and every tile stays inside bounds.
+        let step = result[1]!.minX - result[2]!.minX
+        XCTAssertEqual(result[0]!.minX - result[1]!.minX, step, accuracy: 0.01)
+        XCTAssertLessThanOrEqual(result[0]!.maxX, bounds.maxX + 0.01)
+        XCTAssertLessThanOrEqual(result[0]!.maxY, bounds.maxY + 0.01)
+    }
+
+    func testCascadeStepIsCappedAt40() {
+        // Two tiles in a huge box: free space / 1 would exceed 40pt — capped.
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(2), preset: .cascade,
+                                             in: bounds, gap: 0)
+        XCTAssertEqual(result[0]!.minX - result[1]!.minX, 40, accuracy: 0.01)
+    }
+
+    // MARK: - monocle
+
+    func testMonocleGivesEveryTileFullBounds() {
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(4), preset: .monocle,
+                                             in: bounds, gap: 0)
+        XCTAssertEqual(result.count, 4)
+        for rect in result.values { XCTAssertEqual(rect, bounds) }
+    }
 }
