@@ -18,6 +18,7 @@ final class PersistenceCoordinator {
     private let excludeBox: ExcludeListBox
     private let excludeURL: URL
     let layoutLibraryStore: LayoutLibraryStore
+    private let reflowStore: ReflowStore
     private(set) lazy var templateLauncher = TemplateLauncher(driver: driver,
                                                               coordinator: self,
                                                               engine: engine)
@@ -41,6 +42,10 @@ final class PersistenceCoordinator {
     /// Layouts tab re-reads instead of showing a stale list — the library
     /// sibling of `onConfigurationChanged` (finding 16).
     var onLayoutLibraryChanged: (() -> Void)?
+    /// Fires after any reflow-settings write (custom presets, group policy),
+    /// so the menu and an open Reflows tab re-read — same lesson as
+    /// onLayoutLibraryChanged (finding 16 corollary).
+    var onReflowSettingsChanged: (() -> Void)?
 
     var currentExcludedBundleIDs: Set<String> { excludeList.bundleIDs }
 
@@ -72,6 +77,7 @@ final class PersistenceCoordinator {
         excludeBox = ExcludeListBox(ExcludeList.load(from: excludeURL))
         layoutLibraryStore = LayoutLibraryStore(
             url: supportDir.appendingPathComponent("layouts.json"))
+        reflowStore = ReflowStore(url: supportDir.appendingPathComponent("reflows.json"))
         // Legacy files (written before hashed identities) still carry plaintext
         // titles. Scrub every namespace once per launch, not just the one the
         // tracker loads: a raw-text check per file, rewriting only dirty ones.
@@ -197,18 +203,44 @@ final class PersistenceCoordinator {
         templateLauncher.apply(layouts, excludedBundleIDs: currentExcludedBundleIDs)
     }
 
-    /// Reflows the frontmost window's magnet group, or its whole display when
-    /// it has no group, into `preset`. A reflow is a normal window move: the
-    /// tracker records the new frames afterwards, so the arrangement is
-    /// remembered like any other.
+    /// Reflows every eligible window on the active display into `preset`.
+    /// Magnet groups follow the stored policy: exploded (dissolved, members
+    /// placed individually — the default) or kept as one tile each. A reflow
+    /// is a normal window move: the tracker records the new frames afterwards.
     func reflowDisplay(_ preset: GroupLayoutSolver.Preset) {
         let reflow = DisplayGroupReflow(driver: driver,
                                         excludedBundleIDs: currentExcludedBundleIDs,
                                         coordinator: self)
-        let outcome = reflow.apply(preset)
-        if let group = outcome.group { lastGroupPreset[group.id] = preset }
-        NSLog("Ferrite: reflow %@ moved %d windows%@", String(describing: preset),
-              outcome.moved, outcome.group == nil ? "" : " in a group")
+        let keep = reflowStore.load().keepGroupsOnDisplayReflow
+        let moved = reflow.applyToDisplay(preset, keepGroups: keep)
+        if !keep { dissolveGroupsTouchedByDisplayReflow() }
+        NSLog("Ferrite: display reflow %@ moved %d windows (%@ groups)",
+              String(describing: preset), moved, keep ? "kept" : "exploded")
+    }
+
+    /// Reflows exactly one group inside its own bounding box.
+    func reflowGroup(_ preset: GroupLayoutSolver.Preset, groupID: UUID) {
+        guard let group = magnetGroups().first(where: { $0.id == groupID }) else { return }
+        let live = liveMembers(of: group)
+        guard live.count > 1 else { return }
+        let reflow = DisplayGroupReflow(driver: driver,
+                                        excludedBundleIDs: currentExcludedBundleIDs,
+                                        coordinator: self)
+        let moved = reflow.apply(preset, to: group, live: live)
+        lastGroupPreset[group.id] = preset
+        NSLog("Ferrite: group reflow %@ moved %d windows",
+              String(describing: preset), moved)
+    }
+
+    /// Explode policy: every group that just had two or more windows scattered
+    /// loses its membership entirely, reusing the same path as the Groups
+    /// menu's Ungroup. Never leave a group whose members no longer touch —
+    /// stale membership with broken adjacency is a documented footgun.
+    private func dissolveGroupsTouchedByDisplayReflow() {
+        // A snapshot: `ungroup` rewrites the tracker's array on every call.
+        for group in magnetGroups() where liveMembers(of: group).count > 1 {
+            ungroup(group.id)
+        }
     }
 
     // MARK: - Magnet groups
@@ -489,6 +521,17 @@ final class PersistenceCoordinator {
 
     func loadArchivedBundles() -> [LayoutBundle] {
         layoutLibraryStore.load().archivedBundles()
+    }
+
+    func reflowSettings() -> ReflowSettings {
+        reflowStore.load()
+    }
+
+    func updateReflowSettings(_ mutate: (inout ReflowSettings) -> Void) {
+        var settings = reflowStore.load()
+        mutate(&settings)
+        try? reflowStore.save(settings)
+        onReflowSettingsChanged?()
     }
 
     /// Single funnel for library writes: every mutation notifies open UI.
