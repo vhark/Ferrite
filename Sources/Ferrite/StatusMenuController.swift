@@ -26,14 +26,27 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         menuLayouts.removeAll()
 
-        // PRD §4: the reflow row sits at the top, above anything user-created.
-        // The row reflows the frontmost window's group when it has one, so the
-        // header says which.
+        // PRD §4: the reflow rows sit at the top, above anything user-created.
+        // Display and group are separate rows on purpose — one click, one
+        // target, no guessing from what happens to be frontmost.
+        rebuildMenuPresets()
         let groups = coordinator.magnetGroupSummaries()
-        menu.addItem(sectionHeader(groups.contains { $0.isActive }
-            ? "Reflow this group" : "Reflow this display"))
-        menu.addItem(presetRow())
+        menu.addItem(sectionHeader("Reflow this display"))
+        menu.addItem(presetRows(target: ReflowTarget.display))
+        let keep = actionItem("Keep magnet groups together",
+                              #selector(toggleKeepGroups))
+        keep.indentationLevel = 1
+        keep.state = coordinator.reflowSettings().keepGroupsOnDisplayReflow ? .on : .off
+        menu.addItem(keep)
         menu.addItem(.separator())
+
+        // Only the group owning the frontmost window: "this group" has to mean
+        // something unambiguous. Any other group reflows from its own submenu.
+        if let active = groups.first(where: { $0.isActive }) {
+            menu.addItem(sectionHeader("Reflow this group"))
+            menu.addItem(presetRows(target: ReflowTarget.group(active.id)))
+            menu.addItem(.separator())
+        }
 
         if !groups.isEmpty {
             menu.addItem(sectionHeader("Groups"))
@@ -109,46 +122,86 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// Presets in menu order: weighted treemaps first, then the even splits.
-    private static let reflowPresets: [(preset: GroupLayoutSolver.Preset,
-                                       title: String)] = [
-        (.treemap(bias: .center), "Treemap — heaviest in the centre"),
-        (.treemap(bias: .left), "Treemap — heaviest on the left"),
-        (.treemap(bias: .right), "Treemap — heaviest on the right"),
-        (.symmetric, "Symmetric — equal areas"),
+    /// Built-ins in spec order; the user's pinned customs append after.
+    private static let builtinPresets: [(preset: GroupLayoutSolver.Preset,
+                                        title: String)] = [
         (.columns, "Columns"),
         (.rows, "Rows"),
         (.grid, "Grid"),
+        (.symmetric, "Symmetric — equal areas"),
         (.mainSide, "Main + side"),
+        (.mainSideMirrored, "Main + side — main on the right"),
+        (.mainCenter(fraction: 0.6, sideCapacity: nil), "Main in the centre"),
+        (.bsp, "Split spiral"),
+        (.treemap(bias: .center), "Treemap — heaviest in the centre"),
+        (.treemap(bias: .left), "Treemap — heaviest on the left"),
+        (.treemap(bias: .right), "Treemap — heaviest on the right"),
+        (.cascade, "Cascade"),
+        (.monocle, "Monocle — all full size"),
     ]
 
-    /// One row of glyph buttons. A menu item's view is never auto-sized, so the
-    /// stack gets an explicit frame from its own fitting size.
-    private func presetRow() -> NSMenuItem {
-        let buttons = Self.reflowPresets.indices.map { index -> NSButton in
-            let entry = Self.reflowPresets[index]
-            let button = NSButton(image: PresetGlyph.image(for: entry.preset),
-                                  target: self, action: #selector(reflowPreset(_:)))
-            button.tag = index
-            button.isBordered = false
-            button.imagePosition = .imageOnly
-            button.imageScaling = .scaleNone
-            button.toolTip = entry.title
-            button.setAccessibilityLabel(entry.title)
-            button.widthAnchor.constraint(
-                equalToConstant: PresetGlyph.size.width + 4).isActive = true
-            button.heightAnchor.constraint(
-                equalToConstant: PresetGlyph.size.height + 4).isActive = true
-            return button
+    /// Rebuilt on every menu open: built-ins plus the user's pinned customs.
+    private var menuPresets: [(preset: GroupLayoutSolver.Preset, title: String)] = []
+
+    private func rebuildMenuPresets() {
+        menuPresets = Self.builtinPresets
+            + coordinator.reflowSettings().customPresets.map { ($0.preset, $0.name) }
+    }
+
+    /// Which reflow a glyph drives, carried on the button's `identifier` so one
+    /// row builder serves the display, the active group, and every group's own
+    /// submenu without a click ever having to guess.
+    private enum ReflowTarget {
+        static let display = NSUserInterfaceItemIdentifier("reflow-display")
+        static let groupPrefix = "reflow-group-"
+        static func group(_ id: UUID) -> NSUserInterfaceItemIdentifier {
+            NSUserInterfaceItemIdentifier(groupPrefix + id.uuidString)
         }
-        let row = NSStackView(views: buttons)
-        row.orientation = .horizontal
-        row.spacing = 2
+    }
+
+    /// Thirteen built-ins plus customs would run off the right edge of the menu
+    /// at 48pt a glyph, so the row wraps instead of growing.
+    private static let glyphsPerLine = 8
+
+    /// Wrapped rows of glyph buttons for one reflow target. A menu item's view
+    /// is never auto-sized, so the stack gets an explicit frame from its own
+    /// fitting size.
+    private func presetRows(target: NSUserInterfaceItemIdentifier) -> NSMenuItem {
+        var lines: [NSStackView] = []
+        for start in stride(from: 0, to: menuPresets.count, by: Self.glyphsPerLine) {
+            let end = min(start + Self.glyphsPerLine, menuPresets.count)
+            let buttons = (start..<end).map { index -> NSButton in
+                let entry = menuPresets[index]
+                let button = NSButton(image: PresetGlyph.image(for: entry.preset),
+                                      target: self, action: #selector(reflowPreset(_:)))
+                button.identifier = target
+                button.tag = index
+                button.isBordered = false
+                button.imagePosition = .imageOnly
+                button.imageScaling = .scaleNone
+                button.toolTip = entry.title
+                button.setAccessibilityLabel(entry.title)
+                button.translatesAutoresizingMaskIntoConstraints = false
+                button.widthAnchor.constraint(
+                    equalToConstant: PresetGlyph.size.width + 4).isActive = true
+                button.heightAnchor.constraint(
+                    equalToConstant: PresetGlyph.size.height + 4).isActive = true
+                return button
+            }
+            let line = NSStackView(views: buttons)
+            line.orientation = .horizontal
+            line.spacing = 2
+            lines.append(line)
+        }
+        let column = NSStackView(views: lines)
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 2
         // Left inset lines the glyphs up with the indented rows below.
-        row.edgeInsets = NSEdgeInsets(top: 2, left: 16, bottom: 4, right: 12)
-        row.frame = NSRect(origin: .zero, size: row.fittingSize)
+        column.edgeInsets = NSEdgeInsets(top: 2, left: 16, bottom: 4, right: 12)
+        column.frame = NSRect(origin: .zero, size: column.fittingSize)
         let item = NSMenuItem()
-        item.view = row
+        item.view = column
         return item
     }
 
@@ -187,6 +240,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         submenu.addItem(.separator())
         submenu.addItem(groupActionItem("Ungroup",
                                         #selector(ungroupGroup(_:)), group.id))
+        // Reflowable from here too, so a group that does not own the frontmost
+        // window needs no focus dance first.
+        submenu.addItem(.separator())
+        submenu.addItem(sectionHeader("Reflow"))
+        submenu.addItem(presetRows(target: ReflowTarget.group(group.id)))
         item.submenu = submenu
         return item
     }
@@ -251,10 +309,21 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     // MARK: - Actions
 
     @objc private func reflowPreset(_ sender: NSButton) {
-        guard Self.reflowPresets.indices.contains(sender.tag) else { return }
-        coordinator.reflowDisplay(Self.reflowPresets[sender.tag].preset)
+        guard menuPresets.indices.contains(sender.tag) else { return }
+        let preset = menuPresets[sender.tag].preset
+        if let raw = sender.identifier?.rawValue,
+           raw.hasPrefix(ReflowTarget.groupPrefix),
+           let id = UUID(uuidString: String(raw.dropFirst(ReflowTarget.groupPrefix.count))) {
+            coordinator.reflowGroup(preset, groupID: id)
+        } else {
+            coordinator.reflowDisplay(preset)
+        }
         // A button inside a menu item's view does not dismiss the menu itself.
         statusItem.menu?.cancelTracking()
+    }
+
+    @objc private func toggleKeepGroups() {
+        coordinator.updateReflowSettings { $0.keepGroupsOnDisplayReflow.toggle() }
     }
 
     @objc private func setGroupModeStandard(_ sender: NSMenuItem) {

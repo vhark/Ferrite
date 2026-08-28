@@ -380,24 +380,6 @@ final class PersistenceCoordinator {
         return MagnetMember(bundleID: bundleID, slot: slot)
     }
 
-    /// The group that owns the frontmost window, with the members that have a
-    /// window open right now. Group reflow is an override of whole-display
-    /// reflow, so an unmated frontmost window answers nil and the whole
-    /// display reflows exactly as it did before groups existed. Two live
-    /// members is the floor: a group whose mates have all closed is not a
-    /// group any more.
-    func activeGroup() -> (group: MagnetGroup, live: [LiveMember])? {
-        let groups = tracker.magnetGroups
-        guard !groups.isEmpty, let front = frontmostMember(),
-              let group = groups.first(where: {
-                  $0.contains(bundleID: front.bundleID, slot: front.slot)
-              })
-        else { return nil }
-        let live = liveMembers(of: group)
-        guard live.count > 1 else { return nil }
-        return (group, live)
-    }
-
     /// One menu row's worth of a group, with no AX resolution left to do.
     struct GroupSummary {
         let id: UUID
@@ -405,7 +387,7 @@ final class PersistenceCoordinator {
         /// Localized app names of the members with a window open, in the order
         /// the user built the group.
         let title: String
-        /// True for the group the glyph row would reflow right now.
+        /// True for the group that owns the frontmost window.
         let isActive: Bool
     }
 
