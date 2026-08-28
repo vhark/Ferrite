@@ -172,4 +172,64 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         XCTAssertEqual(result.count, 4)
         for rect in result.values { XCTAssertEqual(rect, bounds) }
     }
+
+    // MARK: - fixedColumns
+
+    func testFixedColumnsWrapsIntoRowsWithinColumns() {
+        // 4 tiles, 3 columns: w0,w1,w2 across, w3 under w0.
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(4),
+                                             preset: .fixedColumns(3),
+                                             in: bounds, gap: 0)
+        XCTAssertEqual(result[0]!.minX, 100, accuracy: 0.01)
+        XCTAssertEqual(result[1]!.minX, 500, accuracy: 0.01)
+        XCTAssertEqual(result[2]!.minX, 900, accuracy: 0.01)
+        XCTAssertEqual(result[3]!.minX, 100, accuracy: 0.01)
+        // Column 0 holds two tiles → half height each; columns 1-2 full height.
+        XCTAssertEqual(result[0]!.height, 400, accuracy: 0.01)
+        XCTAssertEqual(result[3]!.minY, 450, accuracy: 0.01)
+        XCTAssertEqual(result[1]!.height, 800, accuracy: 0.01)
+    }
+
+    func testFixedColumnsFewerWindowsLeaveColumnsEmpty() {
+        // Zones are fixed: 2 tiles in 7 columns occupy 1/7 width each.
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(2),
+                                             preset: .fixedColumns(7),
+                                             in: bounds, gap: 0)
+        XCTAssertEqual(result[0]!.width, 1200.0 / 7, accuracy: 0.01)
+        XCTAssertEqual(result[1]!.minX, 100 + 1200.0 / 7, accuracy: 0.01)
+    }
+
+    // MARK: - fixedGrid
+
+    func testFixedGridFillsRowMajorAndKeepsCellSize() {
+        // 7 wide × 3 tall, 5 windows → 5 cells of the 21.
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(5),
+                                             preset: .fixedGrid(columns: 7, rows: 3),
+                                             in: bounds, gap: 0)
+        let cellW = 1200.0 / 7, cellH = 800.0 / 3
+        for rect in result.values {
+            XCTAssertEqual(rect.width, cellW, accuracy: 0.01)
+            XCTAssertEqual(rect.height, cellH, accuracy: 0.01)
+        }
+        // Row-major: tile 4 is the 5th cell of the top row.
+        XCTAssertEqual(result[4]!.minX, 100 + cellW * 4, accuracy: 0.01)
+        XCTAssertEqual(result[4]!.minY, 50, accuracy: 0.01)
+    }
+
+    func testFixedGridOverflowCyclesZStacked() {
+        // 5 tiles in a 2×2 grid: tile 4 reuses cell 0.
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(5),
+                                             preset: .fixedGrid(columns: 2, rows: 2),
+                                             in: bounds, gap: 0)
+        XCTAssertEqual(result[4], result[0])
+    }
+
+    func testFixedGridSecondRowPlacement() {
+        let result = GroupLayoutSolver.solve(tiles: evenTiles(4),
+                                             preset: .fixedGrid(columns: 3, rows: 2),
+                                             in: bounds, gap: 0)
+        // Tile 3 starts row two.
+        XCTAssertEqual(result[3]!.minX, 100, accuracy: 0.01)
+        XCTAssertEqual(result[3]!.minY, 450, accuracy: 0.01)
+    }
 }

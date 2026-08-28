@@ -25,6 +25,8 @@ public enum GroupLayoutSolver {
         case columns
         case rows
         case grid
+        case fixedColumns(Int)
+        case fixedGrid(columns: Int, rows: Int)
         case mainSide
         case mainSideMirrored
         case mainCenter(fraction: Double, sideCapacity: Int?)
@@ -65,6 +67,10 @@ public enum GroupLayoutSolver {
             raw = strips(tiles, in: bounds, vertical: false)
         case .grid:
             raw = grid(tiles, in: bounds)
+        case .fixedColumns(let count):
+            raw = fixedColumns(tiles, in: bounds, count: count)
+        case .fixedGrid(let columns, let rows):
+            raw = fixedGrid(tiles, in: bounds, columns: columns, rows: rows)
         case .mainSide:
             raw = mainSide(tiles, in: bounds)
         case .mainSideMirrored:
@@ -247,6 +253,52 @@ public enum GroupLayoutSolver {
             let offset = step * CGFloat(count - 1 - index)
             result[tile.id] = CGRect(x: bounds.minX + offset, y: bounds.minY + offset,
                                      width: tileSize.width, height: tileSize.height)
+        }
+        return result
+    }
+
+    /// `count` fixed-width column zones. Tiles fill left-to-right and wrap
+    /// into new rows within their column (tile i → column i % count); a
+    /// column splits its height evenly among its own tiles. Columns beyond
+    /// the tile count stay empty — zones are fixed, never stretched.
+    private static func fixedColumns(_ tiles: [Tile], in bounds: CGRect,
+                                     count: Int) -> [Int: CGRect] {
+        let columns = max(1, count)
+        let columnWidth = bounds.width / CGFloat(columns)
+        var perColumn: [[Tile]] = Array(repeating: [], count: columns)
+        for (index, tile) in tiles.enumerated() {
+            perColumn[index % columns].append(tile)
+        }
+        var result: [Int: CGRect] = [:]
+        for (column, columnTiles) in perColumn.enumerated() where !columnTiles.isEmpty {
+            let rowHeight = bounds.height / CGFloat(columnTiles.count)
+            for (row, tile) in columnTiles.enumerated() {
+                result[tile.id] = CGRect(
+                    x: bounds.minX + columnWidth * CGFloat(column),
+                    y: bounds.minY + rowHeight * CGFloat(row),
+                    width: columnWidth, height: rowHeight)
+            }
+        }
+        return result
+    }
+
+    /// Fixed `columns × rows` zones (FancyZones semantics). Tiles fill cells
+    /// row-major front-to-back; fewer tiles leave trailing cells empty, more
+    /// tiles cycle back through the cells z-stacked. Cells never stretch.
+    private static func fixedGrid(_ tiles: [Tile], in bounds: CGRect,
+                                  columns: Int, rows: Int) -> [Int: CGRect] {
+        let cols = max(1, columns)
+        let rws = max(1, rows)
+        let cellWidth = bounds.width / CGFloat(cols)
+        let cellHeight = bounds.height / CGFloat(rws)
+        let cellCount = cols * rws
+        var result: [Int: CGRect] = [:]
+        for (index, tile) in tiles.enumerated() {
+            let cell = index % cellCount
+            result[tile.id] = CGRect(
+                x: bounds.minX + cellWidth * CGFloat(cell % cols),
+                y: bounds.minY + cellHeight * CGFloat(cell / cols),
+                width: cellWidth, height: cellHeight)
         }
         return result
     }
