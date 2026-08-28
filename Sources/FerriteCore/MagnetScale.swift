@@ -109,4 +109,21 @@ public enum MagnetScale {
         }
         return result
     }
+
+    /// Proportionally remaps frames from one bounding box into another —
+    /// display reflow's keep-groups path: the solver places the group's box,
+    /// this carries the mated formation into it. Pure geometry; the caller
+    /// owns minimum-size policy (the solver already clamped the target box).
+    public static func remap(frames: [Int: CGRect], from source: CGRect,
+                             to target: CGRect) -> [Int: CGRect] {
+        guard source.width > 0, source.height > 0 else { return frames }
+        let scaleX = target.width / source.width
+        let scaleY = target.height / source.height
+        return frames.mapValues { frame in
+            CGRect(x: target.minX + (frame.minX - source.minX) * scaleX,
+                   y: target.minY + (frame.minY - source.minY) * scaleY,
+                   width: frame.width * scaleX,
+                   height: frame.height * scaleY)
+        }
+    }
 }
