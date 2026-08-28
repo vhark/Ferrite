@@ -20,14 +20,19 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         let result = GroupLayoutSolver.solve(tiles: rankedTiles(4),
                                              preset: .mainSideMirrored,
                                              in: bounds, gap: 0)
+        XCTAssertEqual(result.count, 4)
         XCTAssertEqual(result[0]!.width, 720, accuracy: 0.01)   // 60% of 1200
         XCTAssertEqual(result[0]!.maxX, 1300, accuracy: 0.01)   // anchored right
         XCTAssertEqual(result[0]!.height, 800, accuracy: 0.01)
-        // The three side tiles stack full-width-of-side on the left.
-        for id in 1...3 {
+        // The three side tiles stack full-width-of-side on the left, in tile
+        // order — pinning minY is what stops a reversed stack from passing.
+        let stripHeight = 800.0 / 3
+        for (offset, id) in (1...3).enumerated() {
             XCTAssertEqual(result[id]!.minX, 100, accuracy: 0.01)
             XCTAssertEqual(result[id]!.width, 480, accuracy: 0.01)
-            XCTAssertEqual(result[id]!.height, 800.0 / 3, accuracy: 0.01)
+            XCTAssertEqual(result[id]!.height, stripHeight, accuracy: 0.01)
+            XCTAssertEqual(result[id]!.minY, 50 + stripHeight * Double(offset),
+                           accuracy: 0.01)
         }
     }
 
@@ -37,11 +42,14 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
         let mirrored = GroupLayoutSolver.solve(tiles: rankedTiles(3),
                                                preset: .mainSideMirrored,
                                                in: bounds, gap: 0)
+        XCTAssertEqual(mirrored.count, straight.count)
         for (id, rect) in straight {
             let flipped = CGRect(x: bounds.minX + bounds.maxX - rect.maxX,
                                  y: rect.minY, width: rect.width, height: rect.height)
             XCTAssertEqual(mirrored[id]!.minX, flipped.minX, accuracy: 0.01)
             XCTAssertEqual(mirrored[id]!.width, flipped.width, accuracy: 0.01)
+            XCTAssertEqual(mirrored[id]!.minY, flipped.minY, accuracy: 0.01)
+            XCTAssertEqual(mirrored[id]!.height, flipped.height, accuracy: 0.01)
         }
     }
 
