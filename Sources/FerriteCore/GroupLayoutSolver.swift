@@ -21,7 +21,7 @@ public enum GroupLayoutSolver {
         }
     }
 
-    public enum Preset: Equatable {
+    public enum Preset: Equatable, Codable {
         case columns
         case rows
         case grid
@@ -42,7 +42,7 @@ public enum GroupLayoutSolver {
                                                      .symmetric, .bsp]
     }
 
-    public enum TreemapBias: Equatable {
+    public enum TreemapBias: Equatable, Codable {
         case center
         case left
         case right
