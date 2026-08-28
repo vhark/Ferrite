@@ -1,6 +1,6 @@
 # Ferrite — Session Handoff (2026-08-25)
 
-State: `main`, working tree clean, ahead of tag `v0.11.0-ferrite` by the M4 release infrastructure, README/GUIDE/LICENSE, and the Preferences staleness fix (finding 16 corollary, live-verified 2026-08-25). 220 unit tests, 0 failures.
+State: `main`, working tree clean, ahead of tag `v0.11.0-ferrite` by the M4 release infrastructure, README/GUIDE/LICENSE, the Preferences staleness fix (finding 16 corollary, live-verified 2026-08-25), the `.standard` group resize mode, and M6 reflow presets v2 (new built-ins, user-defined custom presets in a Preferences → Reflows tab, explicit display/group reflow targets, display-reflow group policy). Everything builds; 253 unit tests, 0 failures. The `.standard` mode and all of M6 are **awaiting live acceptance** — no tag until that passes.
 
 ## What Ferrite is
 
@@ -17,7 +17,7 @@ Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (
 
 ## User data
 
-- `~/Library/Application Support/Ferrite/` — layouts.json, per-configuration records + magnet groups, exclude.json. Sync-friendly; window titles are salted hashes, never plaintext.
+- `~/Library/Application Support/Ferrite/` — layouts.json, per-configuration records + magnet groups, exclude.json, reflows.json (custom reflow presets + the display-reflow group policy). Sync-friendly; window titles are salted hashes, never plaintext.
 - `defaults dev.ferrite.Ferrite` — identity salt (32 bytes, key `dev.ferrite.identitySalt`) + hotkey assignments. The salt is load-bearing: losing it orphans every stored titleHash (finding 14).
 - **Rollback:** the old `~/Library/Application Support/MacTLM/` directory and `dev.mactlm.MacTLM` defaults domain were deliberately left intact by the copy-never-delete migration (`LegacyMigration`, one-shot, idempotent). Safe to delete once Ferrite has been trusted for a while.
 
@@ -25,10 +25,11 @@ Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (
 
 - **Late-arrival restacking** (`06a98d1`): a cold bundle launch where a slow app (Illustrator) takes >15s to draw.
 - **A→B group membership move**: first time two magnet clusters exist and a member is dragged from one onto the other.
+- **M6 reflow presets v2 + `.standard` resize mode**: the whole milestone, by hand. Both reflow rows (*Reflow this display*, *Reflow this group*) and the glyph row inside a group's own submenu, targeting what they say they target; the five new built-ins (main-on-the-right, main-in-the-centre, split spiral, cascade, monocle); a custom Grid and a custom Main centre preset end to end — created in Preferences → Reflows, glyph preview matching the result, clicked from the menu; the group policy both ways with a real magnet group (**off/explode**: members placed individually and the touched groups dissolved; **on/keep**: the group placed as one tile with its formation preserved); and `.standard` against Shrink and Nudge on a shared edge, an outer edge and a corner. Passing this is what lets M6 into the shipped table.
 
 ## Open backlog (all optional)
 
-Keychain salt storage · re-hash on demand for pre-M2d records · target-display picker · delete the install.sh transition block after a while · Linux port: `FerriteCore` has zero AppKit imports, a Linux build needs only a new `WindowDriving` (sway/Hyprland IPC or EWMH).
+Keychain salt storage · re-hash on demand for pre-M2d records · target-display picker · delete the install.sh transition block after a while · M6 reflow presets v2 and the `.standard` resize mode are implemented and pending live verification (above), not open work · Linux port: `FerriteCore` has zero AppKit imports, a Linux build needs only a new `WindowDriving` (sway/Hyprland IPC or EWMH).
 
 **PRD M4 (public release):** README, GUIDE, MIT license, issue templates, Rectangle/KeyboardShortcuts attribution, Homebrew cask (`Casks/ferrite.rb`, this repo doubles as the tap), and the full notarization pipeline (`scripts/release.sh`, runbook in `docs/RELEASING.md`) are all in place. The only remaining gate to a public 1.0 is credentials: enroll in the Apple Developer Program, install a Developer ID Application certificate, run `xcrun notarytool store-credentials ferrite-notary`, then `scripts/release.sh 1.0.0`. Dry-run verified with `--no-notarize`.
 

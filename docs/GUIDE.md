@@ -37,8 +37,10 @@ The menu bar icon (a group-of-rectangles glyph) is the main surface. Top to bott
 
 | Section | What it does |
 |---|---|
-| **Reflow this display / group** | A row of eight glyph buttons; each icon is drawn by the layout solver itself, so the picture *is* the behavior. Reflows the frontmost window's magnet group when it has one, otherwise every eligible window on the active display. See [Reflow presets](#reflow-presets). |
-| **Groups** | One row per magnet group (e.g. "Arc ×2 + Paseo"), with a submenu: **Resize mode** (Standard / Shrink / Nudge), **Grow frontmost** / **Shrink frontmost** (weight ×1.25 / ×0.8, reapplies the group's last preset), **Ungroup**. Only groups with at least two open windows are listed. |
+| **Reflow this display** | Rows of glyph buttons (wrapping at eight per line); each icon is drawn by the layout solver itself, so the picture *is* the behavior. Clicking one reflows every eligible window on the display holding the frontmost window. Always present. See [Reflow presets](#reflow-presets). |
+| **Keep magnet groups together** | Checkmark toggle indented under those glyphs. Off (the default): a display reflow places group members individually and dissolves the groups it touched. On: each intact group is placed as one tile with its formation preserved. The same setting as the toggle in Preferences → Reflows. |
+| **Reflow this group** | Appears only when the frontmost window belongs to a magnet group with 2+ open members. The same glyphs, reflowing just that group inside its own bounding box, using the members' weights. |
+| **Groups** | One row per magnet group (e.g. "Arc ×2 + Paseo"), with a submenu: **Resize mode** (Standard / Shrink / Nudge), **Grow frontmost** / **Shrink frontmost** (weight ×1.25 / ×0.8, reapplies the group's last preset), **Ungroup**, and a **Reflow** glyph row of its own — so a group that doesn't hold focus can be reflowed without focusing it first. Only groups with at least two open windows are listed. |
 | **Workspaces** | One row per saved workspace. Click launches it on all displays; the submenu offers **All displays** or a single display's layout. Shows the recorded hotkey. Workspaces saved on displays that aren't attached appear under **Workspaces for other displays** and adapt onto the main display when launched. |
 | **Save Current Arrangement as Layout…** | Snapshots the current desktop (per display) under a name. The dialog's **Hide other apps when launching** checkbox controls stage mode — see [Workspaces](#workspaces). Re-saving an existing name *replaces* that workspace. |
 | **Restore All Window Positions** | Re-asserts every remembered frame for currently running apps. |
@@ -103,11 +105,11 @@ The gesture vocabulary. All gestures use plain window dragging — no modes, no 
 | **Drag an outer edge** (no mate flush against it) | On release, the whole group **scales proportionally along that axis**, as if it were one combined window (except in **Standard**). |
 | **Drag an outer corner** (two unshared edges) | Scales the group along both axes on release (except in **Standard**). A corner mixing one shared and one outer edge does both: live shrink/nudge on the shared axis, proportional settle on the outer one. |
 
-**Standard mode.** In **Standard** neither the live propagation nor the proportional settle runs, so a shared edge, an outer edge and a corner all resize just the one window you grabbed. The group is still a group: ⌘-drag carries the cluster, reflow and the weighted presets treat it as one. Note that pulling a window well clear of its mates this way leaves it no longer touching them, so the next time you drag it and release it away from them, it leaves the group — dragging it back into contact keeps it (adjacency is live geometry, read at the release position, not a remembered fact).
+**Standard mode.** In **Standard** neither the live propagation nor the proportional settle runs, so a shared edge, an outer edge and a corner all resize just the one window you grabbed. The group is still a group: ⌘-drag carries the cluster, and reflowing the group treats it as one, weights and all. Note that pulling a window well clear of its mates this way leaves it no longer touching them, so the next time you drag it and release it away from them, it leaves the group — dragging it back into contact keeps it (adjacency is live geometry, read at the release position, not a remembered fact).
 
 **Weights.** Each member carries a rank (default 1). *Grow frontmost* / *Shrink frontmost* in the group's submenu scale the active member's weight ×1.25 / ×0.8 (clamped 0.25–8) and re-run the group's last preset so the change is visible immediately. Weights feed the weighted presets — see below.
 
-**Persistence.** Groups (membership, resize mode, weights) are saved per display configuration and survive restarts. Adjacency, however, is always read from live geometry — a group whose members drifted apart scales as a loose cluster until re-mated.
+**Persistence.** Groups (membership, resize mode, weights) are saved per display configuration and survive restarts. Adjacency, however, is always read from live geometry — a group whose members drifted apart scales as a loose cluster until re-mated. One thing does end membership without you asking: a *display* reflow, under its default explode policy, dissolves the groups it scattered — see [Reflow presets](#reflow-presets) if you'd rather it kept them.
 
 **Minimums.** No gesture crushes a window below 240×160; extreme shrinks stop at the floor (members may overlap at the extreme, deliberately).
 
@@ -115,19 +117,40 @@ The gesture vocabulary. All gestures use plain window dragging — no modes, no 
 
 ## Reflow presets
 
-The glyph row at the top of the menu. Each button's icon is a miniature render of its preset, drawn by the same solver that will move your windows.
+Rows of glyph buttons at the top of the menu. Each button's icon is a miniature render of its preset, drawn by the same solver that will move your windows — a preview cannot disagree with what clicking it does.
 
-Scope: if the frontmost window belongs to a magnet group with 2+ open members, the preset reflows **that group inside its own bounding box** (header reads *Reflow this group*), using the members' weights. Otherwise it reflows **every eligible window on the active display** (header: *Reflow this display*), with weights taken from stacking order — frontmost heaviest — so the weighted presets work with zero setup.
+**Two explicit targets.** *Reflow this display* is always present and reflows **every eligible window on the display holding the frontmost window**, with weights taken from stacking order — frontmost heaviest — so the weighted presets work with zero setup. *Reflow this group* appears only when the frontmost window belongs to a magnet group with 2+ open members, and reflows **that group inside its own bounding box** using the members' own weights. Every group's submenu carries the same glyph row, so a group that doesn't hold focus is still reflowable without focusing it first. (One row used to serve both, silently retargeting itself according to where focus happened to sit; which of the two you get is now your choice, not an inference from your focus.)
 
 | Preset | Behavior |
 |---|---|
-| **Treemap — heaviest in the centre / left / right** | Weight-proportional areas; the heaviest window takes the biased position, the rest fill around it. The signature layout: rank with *Grow frontmost*, or just focus what matters and let z-order rank for you. |
+| **Columns** | Even vertical strips, one per window. |
+| **Rows** | Even horizontal strips. |
+| **Grid** | Near-square even grid; the cell count follows the window count. |
 | **Symmetric — equal areas** | The treemap's equal-weights case: every window the same area, arranged compactly. |
-| **Columns / Rows** | Even vertical / horizontal strips. |
-| **Grid** | Near-square even grid. |
-| **Main + side** | One large main window, the rest stacked in a side column. |
+| **Main + side** | One large main window taking 60% of the width on the **left**, the rest stacked in a side column on the right. The heaviest window is the main one. |
+| **Main + side — main on the right** | The same layout flipped: the main window takes 60% on the **right**, the others stack down the left. For the display where your reference window belongs on the far side. |
+| **Main in the centre** | The heaviest window centred at 60% of the width, the remainder split into two **equal** side columns; the rest deal out alternately — second window to the left, third to the right, and so on. The centre stays centred even when one side ends up empty. Make your own proportions with a custom preset (below). |
+| **Split spiral** | A dwindling spiral: the frontmost window takes half the area, the next takes half of what remains, and so on, flipping between vertical and horizontal splits. Hyprland's default layout; splits are an even 50/50 and ignore weights. |
+| **Treemap — heaviest in the centre / left / right** | Weight-proportional areas; the heaviest window takes the biased position, the rest fill around it. The signature layout: rank with *Grow frontmost*, or just focus what matters and let z-order rank for you. |
+| **Cascade** | Every window at 70% of the area's width and height, staggered diagonally from the top-left, the frontmost deepest and on top. The step shrinks as the window count grows so the last one still fits. |
+| **Monocle — all full size** | Every window at full size, one on top of another, in the stacking order they already had. |
 
-Reflow moves *eligible* windows only: standard, non-minimized windows of visible apps, never excluded apps, never Ferrite itself. A preset is a gesture, not a mode — nothing re-enforces it afterward.
+**Cascade and Monocle overlap on purpose.** Every other preset carves the area into tiles that don't overlap. These two stack windows instead — Cascade offsets each window from the one behind it so the pile stays clickable, Monocle gives every window the whole area so you work on one at a time without losing the others. Nothing is hidden or minimized; it's a stack of real windows in their existing order.
+
+Reflow moves *eligible* windows only: standard, non-minimized windows of visible apps, never excluded apps, never Ferrite itself. A preset is a gesture, not a mode — nothing re-enforces it afterward. A display or group holding just one eligible window is left alone: there is nothing to arrange, so nothing moves.
+
+**Custom presets.** Preferences → Reflows lets you define your own, each with a name; they appear as extra glyphs at the end of every reflow row — the display row, the group row, and each group's submenu. Three kinds:
+
+- **Columns(n)** — *n* fixed-width columns (1–12). Window *i* goes to column *i* % *n*, so windows deal out left to right and wrap; a column then splits its own height evenly among the windows that landed in it. Unlike the built-in Columns, the column count is yours, not the window count's.
+- **Grid(cols × rows)** — an exact grid of fixed zones, up to 12 wide and 8 tall. Windows fill the cells row by row, frontmost first. See the fixed-zone note below: this is the one preset whose behavior surprises people, and deliberately so.
+- **Main centre(fraction, per-side cap)** — the parameterized *Main in the centre*: the centre fraction is yours (20–90%), and the cap limits how many windows stack per side column. A cap of 0 means uncapped, one cell per window; beyond the cap, extra windows cycle back through the cells and stack.
+
+**Grid zones are fixed, and that's the point.** Ask for 7×3 and you get 21 fixed cells of one size (subject only to the 240×160 floor every layout respects). With five windows open, five cells fill and the remaining sixteen **stay empty** — the five windows do *not* stretch to fill the display. That's how you get a stable, muscle-memory layout: a window lands the same size in the same place whether two windows are open or twenty. With more windows than cells, the extras cycle back through the cells and stack on top of the occupants rather than shrinking anything. If you want windows that grow to fill the area, use the built-in Grid, Columns or Symmetric instead. A fixed-zone glyph is drawn with its true cell count — 21 cells for a 7×3 — so the preview shows you exactly the division you asked for, not an approximation of it.
+
+**What a display reflow does to your groups.** A display reflow finds magnet groups in its way, and the *Keep magnet groups together* checkmark under the display glyphs decides what happens to them. It's the same stored setting as the toggle in Preferences → Reflows, so the two can never disagree. The default is **off — explode**.
+
+- **Off (explode).** Every member is placed as its own tile, exactly like an ungrouped window, and every group the reflow actually touched is then dissolved — the same outcome as clicking *Ungroup*. Be aware this dissolves a group even when only **one** of its members was on the reflowed display, while its other members sit on another monitor: the moment one member is torn out of the formation, the formation is gone, and membership with broken adjacency is worse than no membership (a group whose members no longer touch scales as a loose cluster). A group the reflow never touched — one living entirely on another display — is left completely alone.
+- **On (keep).** Each intact group — two or more of its live members eligible on that display — is placed as a **single tile**: the solver positions the group's bounding box, and the mated formation is scaled into that cell, so the group keeps its shape and its internal proportions. Ungrouped windows tile alongside it as normal, and a group weighs exactly what its frontmost window would have weighed alone. If the display holds nothing *but* one group, that single tile is the whole display, so the group scales up to fill it. Honest limit: a group straddling two displays gets only its on-display members collapsed into the cell while the others stay where they are, which leaves the formation broken across the seam. Membership survives, so reflowing the group itself (the *Reflow this group* row, or the group's own submenu) puts it right.
 
 ---
 
@@ -136,6 +159,10 @@ Reflow moves *eligible* windows only: standard, non-minimized windows of visible
 **Layouts tab.** Every workspace: rename inline (renames migrate hotkeys), **Hide others** stage toggle, hotkey recorder, **Archive**. Expand a row to see each display's entries (z-order, live title, **Optional** flag, **Remove**). Archived workspaces keep everything and can be **Restore**d; **Delete Permanently** (double-confirmed) is only available from the archive — one-click irreversible deletion doesn't exist.
 
 **Apps tab.** Every app with remembered windows, for the *current* display configuration: **Never move this app's windows** (the exclude toggle; default-excluded apps say why), per-slot **pin** fields, live titles (shown live, never stored), and **Forget** (drops the app's remembered positions until it's learned again — confirmed, destructive).
+
+**Reflows tab.** Your custom reflow presets, and the group policy that applies to every display reflow:
+- **Keep magnet groups together when reflowing a display** — the same setting as the menu checkmark under the display glyphs; either one moves both. Off by default (explode); see [Reflow presets](#reflow-presets) for what each policy does.
+- **Custom presets** — **Add** appends a preset, the name field renames it inline, the trash button deletes it, and the kind picker chooses Columns / Grid / Main centre (switching kind loads that kind's defaults). Steppers set the parameters: column count, grid columns and rows, centre percentage, per-side cap. The glyph beside each row is a live preview rendered by the solver itself, so it updates as you step and always shows the layout you'll actually get. Presets are stored in `reflows.json`, and the menu picks them up the next time you open it — no restart.
 
 ---
 
@@ -148,7 +175,7 @@ Ferrite's data files are designed to be synced (git, Nextcloud) without leaking 
 - **Pins are yours, not captured**: they're patterns you typed, matched against live titles in memory.
 - Losing the salt (e.g. wiping defaults) doesn't lose data, but every stored hash goes stale — matching degrades to pins and order until windows are re-captured.
 
-Data lives in `~/Library/Application Support/Ferrite/`: `layouts.json` (workspaces), `configurations/*.json` (per-display-set records and magnet groups), `exclude.json` (only written once you customize the list).
+Data lives in `~/Library/Application Support/Ferrite/`: `layouts.json` (workspaces), `configurations/*.json` (per-display-set records and magnet groups), `exclude.json` (only written once you customize the list), `reflows.json` (custom reflow presets and the group policy). None of them contains a window title.
 
 ---
 
@@ -172,7 +199,7 @@ Gesture debugging: launch the binary with `FERRITE_TRACE_DRAG=1` in the environm
 
 Requirements: macOS 13+, Swift 5.9+ toolchain (Xcode or CLT).
 
-- `swift test` — 220 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
+- `swift test` — 253 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
 - `./scripts/make-app.sh` — builds and signs `build/Ferrite.app` (dev builds).
 - `./scripts/install.sh` — builds, installs to `/Applications`, registers Launch at Login. Also migrates state from a previous MacTLM install (one-shot, copy-never-delete) and retires the old app.
 - `./scripts/release.sh <version>` — cuts a public release: universal binary, Developer ID signing with hardened runtime, notarization, stapling, and the Homebrew cask bump. Operator runbook: [`docs/RELEASING.md`](RELEASING.md).

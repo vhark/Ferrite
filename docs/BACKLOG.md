@@ -24,7 +24,7 @@ Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpower
 
 **PRD §9 acceptance: PASSED** live on 2026-08-19 — `Design&Comms` restored from a cold start (Illustrator, both Arcs, Paseo, Nextcloud Talk, Finder, Spotify, Obsidian, Rambox), apps relaunching into place one by one. The single defect it exposed (Illustrator covering the layout) is fixed in `v0.2.1-m2a` and re-verified.
 
-Test suite: 220 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
+Test suite: 253 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and SwiftUI layers are verified by live protocol, not unit tests.
 
 **Multi-display validated 2026-08-20** — a second display (laptop built-in alongside the ultrawide) made the bundle path testable for the first time. `--apply-bundle` placed both laptop windows pixel-exact, confirming `MultiApplyPlanner` and the per-display `visibleArea` plumbing correct.
 
@@ -46,6 +46,7 @@ Test suite: 220 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and
 
 - **Late-arrival restacking (Fix C, `06a98d1`).** When the 15s launch deadline fires before a slow app draws a window, `inFlight` is now retained (`reportedMissing`) so the app rejoins the z-order when it finally settles, with a 120s hard stop. Only reachable on a cold launch of a slow app; not yet observed live. The next full quit-and-relaunch of `Design&Comms` exercises it.
 - **A→B membership move.** Dragging a member of group A onto a window of group B should leave A and join B (un-mate runs before mate on release). Implemented and unit-adjacent (ordering is explicit in `finishDrag`), but never exercised live with two simultaneous groups. First session with two clusters verifies it.
+- **M6 reflow presets v2 + `.standard` resize mode.** Whole milestone: both reflow rows and the per-group submenu row, the five new built-ins, a custom Grid and a custom Main centre end to end, explode vs keep against a real magnet group, and `.standard` compared with Shrink and Nudge. Implemented and unit-covered (253 tests), never driven by hand. Blocks the M6 tag and its shipped-table row.
 
 ## Platform findings (paid for in blood, do not regress)
 
@@ -78,6 +79,7 @@ Test suite: 220 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and
 
 ## Next
 
+- **M6 reflow presets v2 — IMPLEMENTED, pending live acceptance.** Five new built-ins in `GroupLayoutSolver` (`mainSideMirrored`, `mainCenter`, `bsp` dwindle spiral, `cascade`, `monocle`), user-defined custom presets (`fixedColumns`, `fixedGrid`, parameterized `mainCenter`) persisted in `reflows.json` and pinned into the menu's glyph rows, a Preferences → Reflows tab, two explicit reflow targets (display / group, plus a glyph row in every group's own submenu) replacing the one row that retargeted itself, and the display-reflow group policy (explode by default, keep behind one setting shared by the menu checkmark and the tab toggle). Independently, a third group resize mode `.standard` suppresses both shared-edge propagation and the M3c proportional settle. Builds; 253 unit tests, 0 failures. **Not in the shipped table**: no tag until the live acceptance protocol passes on the user's machine (see HANDOFF "Pending verification").
 - **M5 candidate: snap actions (Magnet/Rectangle parity)** — hotkey + drag-to-edge placement of a single window at screen fractions (halves, quarters, thirds, maximize) with pre-snap restore; center/next-display/incremental-resize as fast-follows. Research + full parity table: `docs/superpowers/specs/2026-08-25-tiling-parity-research.md`. All machinery exists: `GroupLayoutSolver` fractional rects, KeyboardShortcuts, `MagnetSnapOverlay` previews, remembered frames for restore. Spaces switching and auto-tiling stay non-goals.
 - **M4 public release** — prep complete 2026-08-24: README + GUIDE + MIT license, issue templates, Rectangle/KeyboardShortcuts attribution, Homebrew cask (`Casks/ferrite.rb`; the app repo doubles as the tap), and `scripts/release.sh` (universal binary, hardened-runtime Developer ID signing, notarize + staple, cask bump; runbook `docs/RELEASING.md`). Blocked only on Apple Developer Program credentials; pipeline dry-run verified with `--no-notarize`. 1.0 tags when the first notarized artifact ships.
 - **Target display choice** — when a layout's display is absent we always adapt onto the main display; offer a picker.
@@ -95,6 +97,10 @@ Test suite: 220 unit tests over `FerriteCore` (pure, Linux-portable). AppKit and
 | ISO-8601 store dates | Sub-second precision truncated | Never compare live vs re-loaded records for equality |
 | Login restore ordering | Startup sweep captures Resume-placed windows; arming settles for already-running remembered apps fixes the restore, but Resume still wins the first paint | Verified working; cosmetic |
 | Launching an app does not reopen its documents | Document apps may come back empty (Open dialog) | Out of scope; finding 3 stops mis-placement |
+| Keep-mode reflow of a group straddling two displays | Only the on-display members collapse into the cell; formation breaks across the seam | Membership survives; reflowing the group itself restores its shape |
+| Explode-mode reflow dissolves a group having any member on the reflowed display | Membership lost for windows that may sit on another display | Deliberate: one member torn out already breaks the formation, and stale membership with broken adjacency is the documented footgun (finding 16's neighbourhood) |
+| `reflows.json` drops unknown keys on save | A newer Ferrite's fields are lost if an older build saves the file | Bounded to not-yet-known fields; known fields always survive, which is what the absent-tolerant decode guarantees (finding 11) |
+| A single window reflows to the full area regardless of preset | A lone window ignores Grid/Cascade zone semantics | `solve` short-circuits one tile to the whole bounds before any preset runs; a lone window filling its display is the desired behavior |
 
 ## Linux port (post-M2)
 
