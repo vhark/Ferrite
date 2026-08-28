@@ -16,6 +16,10 @@ final class MagnetResizeStandardTests: XCTestCase {
         XCTAssertTrue(moves.isEmpty)
     }
 
+    /// Redundant by construction with the two-window case — the early guard
+    /// returns before adjacency is ever swept — but kept: it pins the contract
+    /// against the nudge chain it contrasts with, and would carry its own
+    /// weight if `.standard` ever became a per-mate decision.
     func testStandardModeMovesNothingEvenInAChain() {
         // Three in a row: nudge would push both, standard pushes neither.
         let third = CGRect(x: 1016, y: 0, width: 500, height: 400)
@@ -42,6 +46,7 @@ final class MagnetResizeStandardTests: XCTestCase {
                                            mode: .nudge)
         let mate = try XCTUnwrap(moves[2])
         XCTAssertEqual(mate.width, right.width, accuracy: 0.01)  // size kept
-        XCTAssertGreaterThan(mate.minX, right.minX)              // translated
+        XCTAssertEqual(moves.count, 1)
+        XCTAssertEqual(mate.minX, right.minX + 100, accuracy: 0.01)
     }
 }

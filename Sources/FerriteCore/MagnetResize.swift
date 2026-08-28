@@ -21,6 +21,10 @@ public enum MagnetResize {
                                  adjacencyTolerance: CGFloat = 12) -> [Int: CGRect] {
         guard let now = frames[changed] else { return [:] }
         // Standard mode: the user resized one window and meant only that one.
+        // It sits ahead of the `sizeChanged` test and the adjacency sweep on
+        // purpose — standard must not pay for work whose every answer is
+        // discarded — so this is an early exit, not a duplicate of the
+        // unreachable `.standard` arm below.
         guard mode != .standard else { return [:] }
         // A pure translation is a mating gesture; only edge motion propagates.
         let sizeChanged = abs(now.width - previous.width) > epsilon

@@ -453,7 +453,14 @@ final class MagnetDragSession {
         let moves = MagnetResize.propagate(frames: frames,
                                            changed: event.windowID,
                                            previous: previous,
-                                           mode: group.resizeMode,
+                                           // One gesture, one mode: the session's
+                                           // open-time snapshot wins, so flipping the
+                                           // group's mode mid-gesture cannot make live
+                                           // propagation and the settle disagree. The
+                                           // group is the fallback only when no session
+                                           // is open — `openResize` declines programmatic
+                                           // resizes — where there is one mode anyway.
+                                           mode: resize?.resizeMode ?? group.resizeMode,
                                            gap: Self.gap)
         trace("resize win=\(event.windowID) previous=\(previous) now=\(event.frame) " +
               "mode=\(group.resizeMode) mates=\(frames.count - 1) moves=\(moves.count)")
