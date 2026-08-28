@@ -63,4 +63,17 @@ final class MagnetGroupModelTests: XCTestCase {
         let back = try JSONDecoder().decode(ConfigurationRecords.self, from: data)
         XCTAssertEqual(back, records)
     }
+
+    func testStandardResizeModeRoundTrips() throws {
+        let group = MagnetGroup(members: [member("com.a", 0), member("com.b", 0)],
+                                resizeMode: .standard)
+        let data = try JSONEncoder().encode(group)
+        let back = try JSONDecoder().decode(MagnetGroup.self, from: data)
+        XCTAssertEqual(back.resizeMode, .standard)
+    }
+
+    func testDefaultResizeModeIsStillShrink() {
+        let group = MagnetGroup(members: [member("com.a", 0), member("com.b", 0)])
+        XCTAssertEqual(group.resizeMode, .shrink)
+    }
 }

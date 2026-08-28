@@ -20,6 +20,8 @@ public enum MagnetResize {
                                  minimumSize: CGSize = CGSize(width: 240, height: 160),
                                  adjacencyTolerance: CGFloat = 12) -> [Int: CGRect] {
         guard let now = frames[changed] else { return [:] }
+        // Standard mode: the user resized one window and meant only that one.
+        guard mode != .standard else { return [:] }
         // A pure translation is a mating gesture; only edge motion propagates.
         let sizeChanged = abs(now.width - previous.width) > epsilon
             || abs(now.height - previous.height) > epsilon
@@ -45,6 +47,10 @@ public enum MagnetResize {
                                                     gap: gap, minimumSize: minimumSize)
                     case .nudge:
                         updated = edge.translatingMate(frame, by: delta)
+                    case .standard:
+                        // Unreachable — the early guard returns first. Kept so
+                        // adding a mode can never silently fall through here.
+                        continue
                     }
                     visited.insert(id)
                     result[id] = updated

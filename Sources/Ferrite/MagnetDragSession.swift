@@ -442,7 +442,8 @@ final class MagnetDragSession {
         // group: open the settle-on-release session before live propagation
         // runs, so an outer-edge drag (which propagates nothing) still ends
         // with a settle.
-        openResize(for: event, previous: previous, live: live)
+        openResize(for: event, previous: previous,
+                   resizeMode: group.resizeMode, live: live)
         var frames = Dictionary(live.map { ($0.window.id, $0.window.frame) },
                                 uniquingKeysWith: { first, _ in first })
         // The driver's enumeration can trail the notification by a frame.
@@ -479,6 +480,9 @@ final class MagnetDragSession {
         /// Live members at session start, for back-to-front application.
         let members: [PersistenceCoordinator.LiveMember]
         let outerEdges: Set<MagnetMating.Edge>
+        /// The group's mode at session start — the at-rest state the user was
+        /// looking at when the gesture began.
+        let resizeMode: MagnetGroup.ResizeMode
         let mouseUpMonitor: Any?
     }
     private var resize: Resize?
@@ -488,6 +492,7 @@ final class MagnetDragSession {
     /// already paid for.
     private func openResize(for event: AppObserver.WindowEvent,
                             previous: CGRect,
+                            resizeMode: MagnetGroup.ResizeMode,
                             live: [PersistenceCoordinator.LiveMember]) {
         if let open = resize, open.windowID != event.windowID {
             // Nobody resizes two windows at once, and no mouse-up arrived for
@@ -521,6 +526,7 @@ final class MagnetDragSession {
                         startFrames: startFrames,
                         members: live,
                         outerEdges: outer,
+                        resizeMode: resizeMode,
                         mouseUpMonitor: mouseUp)
         trace("resize session open win=\(event.windowID) outer=\(outer)")
     }
@@ -533,6 +539,10 @@ final class MagnetDragSession {
             return
         }
         endResize()
+        guard open.resizeMode != .standard else {
+            trace("resize settle win=\(open.windowID): standard mode, group untouched")
+            return
+        }
         var releaseFrames: [Int: CGRect] = [:]
         for member in open.members {
             let id = member.window.id

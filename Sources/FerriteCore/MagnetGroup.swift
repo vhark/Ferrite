@@ -25,6 +25,10 @@ public struct MagnetGroup: Codable, Equatable, Identifiable {
         case shrink
         /// The mate keeps its size and translates, possibly pushing its own mates.
         case nudge
+        /// Nothing but the resized window moves: no shared-edge propagation
+        /// and no proportional group settle. Membership survives — the group
+        /// still carries, reflows and weighs as one.
+        case standard
     }
 
     public static let minimumWeight: Double = 0.25

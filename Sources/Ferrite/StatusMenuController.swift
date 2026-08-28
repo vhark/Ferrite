@@ -168,6 +168,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let modeItem = NSMenuItem(title: "Resize mode", action: nil, keyEquivalent: "")
         let modes = NSMenu()
         let choices: [(title: String, mode: MagnetGroup.ResizeMode, action: Selector)] = [
+            ("Standard", .standard, #selector(setGroupModeStandard(_:))),
             ("Shrink", .shrink, #selector(setGroupModeShrink(_:))),
             ("Nudge", .nudge, #selector(setGroupModeNudge(_:))),
         ]
@@ -254,6 +255,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         coordinator.reflowDisplay(Self.reflowPresets[sender.tag].preset)
         // A button inside a menu item's view does not dismiss the menu itself.
         statusItem.menu?.cancelTracking()
+    }
+
+    @objc private func setGroupModeStandard(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator.setResizeMode(.standard, ofGroup: id)
     }
 
     @objc private func setGroupModeShrink(_ sender: NSMenuItem) {

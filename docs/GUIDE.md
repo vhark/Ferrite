@@ -38,7 +38,7 @@ The menu bar icon (a group-of-rectangles glyph) is the main surface. Top to bott
 | Section | What it does |
 |---|---|
 | **Reflow this display / group** | A row of eight glyph buttons; each icon is drawn by the layout solver itself, so the picture *is* the behavior. Reflows the frontmost window's magnet group when it has one, otherwise every eligible window on the active display. See [Reflow presets](#reflow-presets). |
-| **Groups** | One row per magnet group (e.g. "Arc ×2 + Paseo"), with a submenu: **Resize mode** (Shrink / Nudge), **Grow frontmost** / **Shrink frontmost** (weight ×1.25 / ×0.8, reapplies the group's last preset), **Ungroup**. Only groups with at least two open windows are listed. |
+| **Groups** | One row per magnet group (e.g. "Arc ×2 + Paseo"), with a submenu: **Resize mode** (Standard / Shrink / Nudge), **Grow frontmost** / **Shrink frontmost** (weight ×1.25 / ×0.8, reapplies the group's last preset), **Ungroup**. Only groups with at least two open windows are listed. |
 | **Workspaces** | One row per saved workspace. Click launches it on all displays; the submenu offers **All displays** or a single display's layout. Shows the recorded hotkey. Workspaces saved on displays that aren't attached appear under **Workspaces for other displays** and adapt onto the main display when launched. |
 | **Save Current Arrangement as Layout…** | Snapshots the current desktop (per display) under a name. The dialog's **Hide other apps when launching** checkbox controls stage mode — see [Workspaces](#workspaces). Re-saving an existing name *replaces* that workspace. |
 | **Restore All Window Positions** | Re-asserts every remembered frame for currently running apps. |
@@ -99,9 +99,11 @@ The gesture vocabulary. All gestures use plain window dragging — no modes, no 
 | **Mate more windows onto a group** | They join it — groups merge transitively when clusters actually touch. |
 | **Plain-drag a member away and release** (flush with no fellow member) | It **leaves the group**. Groups dissolve below two members. Dragging a member from group A onto group B moves it A→B. |
 | **⌘-drag any member by its title bar** | Carries the **whole group**: the grabbed window moves live, the other members hold still while accent-colored outline ghosts glide in formation, and on release every member lands in one clean write. (Followers don't move live because writing into busy apps mid-drag lags; the ghosts are the honest, instant feedback.) |
-| **Drag a shared edge** (an edge two members meet at) | The mate follows live, per the group's **Resize mode**: **Shrink** — the mate resizes, far edge anchored; **Nudge** — the mate keeps its size and slides, pushing its own mates down the chain. |
+| **Drag a shared edge** (an edge two members meet at) | Per the group's **Resize mode**: **Standard** — only the window you resize changes, the mates stay exactly where they are; **Shrink** — the mate follows live, resizing with its far edge anchored; **Nudge** — the mate follows live, keeping its size and sliding, pushing its own mates down the chain. |
 | **Drag an outer edge** (no mate flush against it) | On release, the whole group **scales proportionally along that axis**, as if it were one combined window. |
 | **Drag an outer corner** (two unshared edges) | Scales the group along both axes on release. A corner mixing one shared and one outer edge does both: live shrink/nudge on the shared axis, proportional settle on the outer one. |
+
+**Standard mode.** In **Standard** neither the live propagation nor the proportional settle runs, so a shared edge, an outer edge and a corner all resize just the one window you grabbed. The group is still a group: ⌘-drag carries the cluster, reflow and the weighted presets treat it as one. Note that pulling a window well clear of its mates this way leaves it no longer touching them, so the next time you *drag* it, it leaves the group (adjacency is live geometry, not a remembered fact).
 
 **Weights.** Each member carries a rank (default 1). *Grow frontmost* / *Shrink frontmost* in the group's submenu scale the active member's weight ×1.25 / ×0.8 (clamped 0.25–8) and re-run the group's last preset so the change is visible immediately. Weights feed the weighted presets — see below.
 
