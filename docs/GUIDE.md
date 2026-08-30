@@ -65,6 +65,10 @@ The menu bar icon (a group-of-rectangles glyph) is the main surface. Top to bott
 
 **Exclude list.** Excluded apps are never moved or resized by any Ferrite mechanism — but they still participate in workspace *stacking* (they're launched and layered, just not placed). Defaults are evidence-based: only apps measured to fight external moves ship excluded (currently After Effects and MATLAB, on Rectangle's authority until testable). Check any app yourself with `--probe-frame` (see [diagnostics](#command-line-diagnostics)).
 
+Exclusion also covers the magnet gestures, which is usually the reason you want it: an excluded app's window cannot start a mate (no blue preview appears when you drag it), cannot be mated *onto* by another window, and never owns a magnet group. So excluding Finder — one click on **Exclude Frontmost App** while it's frontmost — takes it out of grouping entirely, not just out of placement. Reflows skip excluded apps too.
+
+> **Known gap (mate-then-exclude ordering).** Exclusion is enforced when a gesture *starts*, not on windows already inside a group. If you mate an app into a group and exclude it afterwards, the stale membership survives, and ⌘-drag cluster carry, the group's own reflow row, and Grow/Shrink frontmost will still move that window. Excluding *before* mating behaves exactly as described above. The same applies if `exclude.json` syncs from another machine where the app was already grouped. Workaround until this is fixed: **Ungroup** the group (Groups ▸ its submenu), or re-mate without the excluded app. Tracked in `docs/BACKLOG.md`.
+
 ---
 
 ## Workspaces

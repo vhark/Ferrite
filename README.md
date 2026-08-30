@@ -8,7 +8,8 @@ Ferrite is *not* a classic auto-tiler: windows stay free-floating and may overla
 
 - **Position persistence** — every app's windows are remembered automatically and restored when the app relaunches, when you log in, or when your display configuration changes. No setup.
 - **Workspaces** — snapshot your whole desktop as a named layout, per display. One hotkey restores everything: running apps snap into place, missing apps are launched and placed, stacking order included.
-- **Magnet groups** — drag a window near another's edge and they mate flush. Mated windows resize together (shrink or nudge), scale proportionally like one combined window, carry as a cluster with ⌘-drag, and reflow into presets — including a weighted treemap that sizes windows by rank.
+- **Magnet groups** — drag a window near another's edge and they mate flush. Mated windows resize together (shrink, nudge, or standard — resize just the one you grabbed), scale proportionally like one combined window, and carry as a cluster with ⌘-drag.
+- **Reflow presets** — one click tiles a display, or a magnet group, into columns, rows, grid, main+side (either hand), main-centre, a BSP dwindle spiral, cascade, monocle, or a weighted treemap that sizes windows by rank. Define your own too: a fixed column count, an exact X×Y grid of zones, or a main-centre split with your own proportions.
 - **Private by design** — window titles are never written to disk, only salted hashes. The data files are built to be synced (git, Nextcloud) without leaking your browsing history.
 
 ## Install
@@ -45,7 +46,7 @@ The full manual — every gesture, menu item, preference, CLI diagnostic, and tr
 
 ## Status
 
-macOS-first and used daily by its author. The core engine (`FerriteCore`) is pure Foundation with no AppKit dependency — the Linux port needs only a new window driver (sway/Hyprland IPC or EWMH). 220 unit tests; every feature was additionally verified by live protocol on real hardware before shipping.
+macOS-first and used daily by its author. The core engine (`FerriteCore`) is pure Foundation with no AppKit dependency — the Linux port needs only a new window driver (sway/Hyprland IPC or EWMH). 253 unit tests; every feature was additionally verified by live protocol on real hardware before shipping.
 
 ## Acknowledgments
 

@@ -51,7 +51,7 @@ will unmate it — correct behavior, but surprising if undocumented.
 - Test: `Tests/FerriteCoreTests/MagnetResizeStandardTests.swift` (create)
 - Test: `Tests/FerriteCoreTests/MagnetGroupModelTests.swift` (extend)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `Tests/FerriteCoreTests/MagnetResizeStandardTests.swift`:
 
@@ -128,12 +128,12 @@ with `weight` defaulted):
     }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `swift test --filter MagnetResizeStandard 2>&1 | tail -5`
 Expected: compile FAILURE — `type 'MagnetGroup.ResizeMode' has no member 'standard'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `MagnetGroup.swift`, the enum (lines 23-28):
 
@@ -236,14 +236,14 @@ And the action, beside `setGroupModeShrink` (line 259):
     }
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `swift build 2>&1 | tail -3 && swift test 2>&1 | grep -E "Executed [0-9]+ tests" | tail -1`
 Expected: build complete; tests PASS with 6 more than before (4 new + 2
 model tests). Any other exhaustive `switch` over `ResizeMode` that fails to
 compile must gain an explicit `.standard` arm — never a `default`.
 
-- [ ] **Step 5: Document**
+- [x] **Step 5: Document**
 
 In `docs/GUIDE.md`'s magnet-groups resize-mode explanation, add Standard as
 the first of three modes: "**Standard** — only the window you resize changes;
@@ -253,7 +253,7 @@ mates this way leaves it no longer touching them, so the next time you *drag*
 it, it leaves the group (adjacency is live geometry)." Keep the existing
 Shrink and Nudge descriptions.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -268,7 +268,7 @@ git commit -m "feat(magnets): standard resize mode - resize one window, leave ma
 - Modify: `Sources/FerriteCore/GroupLayoutSolver.swift` (enum ~line 24, switch ~line 55, helpers after `mainSide` ~line 120)
 - Test: `Tests/FerriteCoreTests/GroupLayoutSolverV2Tests.swift` (create)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `Tests/FerriteCoreTests/GroupLayoutSolverV2Tests.swift`:
 
@@ -322,12 +322,12 @@ final class GroupLayoutSolverV2Tests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `swift test --filter GroupLayoutSolverV2Tests 2>&1 | tail -5`
 Expected: compile FAILURE — `type 'GroupLayoutSolver.Preset' has no member 'mainSideMirrored'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `GroupLayoutSolver.swift`, add the case and wire it (the enum gains cases in
 several tasks; keep `allBasicCases` updated each time):
@@ -380,14 +380,14 @@ After `mainSide` (~line 120):
     }
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `swift test 2>&1 | grep -E "Executed [0-9]+ tests" | tail -1`
 Expected: PASS, count grows by 2. If an existing exhaustive test iterates
 `allBasicCases` and asserts per-preset counts, it now covers the mirror for
 free; fix any test that hardcoded the old case list.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/FerriteCore/GroupLayoutSolver.swift Tests/FerriteCoreTests/GroupLayoutSolverV2Tests.swift
@@ -402,7 +402,7 @@ git commit -m "feat(solver): mainSideMirrored preset"
 - Modify: `Sources/FerriteCore/GroupLayoutSolver.swift`
 - Test: `Tests/FerriteCoreTests/GroupLayoutSolverV2Tests.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `GroupLayoutSolverV2Tests`:
 
@@ -466,12 +466,12 @@ Append to `GroupLayoutSolverV2Tests`:
     }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `swift test --filter GroupLayoutSolverV2Tests 2>&1 | tail -5`
 Expected: compile FAILURE — no member `mainCenter`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Enum case (parameterized; the built-in menu entry uses `(0.6, nil)`):
 
@@ -542,12 +542,12 @@ Implementation, after `mainSideMirrored`:
     }
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `swift test 2>&1 | grep -E "Executed [0-9]+ tests" | tail -1`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(solver): mainCenter preset with fraction and side capacity"
@@ -559,7 +559,7 @@ git add -A && git commit -m "feat(solver): mainCenter preset with fraction and s
 
 **Files:** same as Task 2.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
     // MARK: - bsp
@@ -588,12 +588,12 @@ git add -A && git commit -m "feat(solver): mainCenter preset with fraction and s
     }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `swift test --filter GroupLayoutSolverV2Tests 2>&1 | tail -5`
 Expected: compile FAILURE — no member `bsp`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Enum case `case bsp` — even splits, add to `allBasicCases`. Switch arm:
 
@@ -633,9 +633,9 @@ Implementation:
     }
 ```
 
-- [ ] **Step 4: Run the full suite** — expected PASS.
+- [x] **Step 4: Run the full suite** — expected PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(solver): bsp dwindle preset"
@@ -647,7 +647,7 @@ git add -A && git commit -m "feat(solver): bsp dwindle preset"
 
 **Files:** same as Task 2.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
     // MARK: - cascade
@@ -688,9 +688,9 @@ git add -A && git commit -m "feat(solver): bsp dwindle preset"
     }
 ```
 
-- [ ] **Step 2: Run to verify failure** — compile FAILURE, no members `cascade`/`monocle`.
+- [x] **Step 2: Run to verify failure** — compile FAILURE, no members `cascade`/`monocle`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Enum cases `case cascade` and `case monocle` — both ignore weights; add both
 to `allBasicCases` **only if** the exhaustive suite's invariants hold for them
@@ -729,9 +729,9 @@ Implementation:
     }
 ```
 
-- [ ] **Step 4: Run the full suite** — expected PASS.
+- [x] **Step 4: Run the full suite** — expected PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(solver): cascade and monocle presets"
@@ -743,7 +743,7 @@ git add -A && git commit -m "feat(solver): cascade and monocle presets"
 
 **Files:** same as Task 2.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
     // MARK: - fixedColumns
@@ -807,9 +807,9 @@ git add -A && git commit -m "feat(solver): cascade and monocle presets"
     }
 ```
 
-- [ ] **Step 2: Run to verify failure** — compile FAILURE.
+- [x] **Step 2: Run to verify failure** — compile FAILURE.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Enum cases (do not add to `allBasicCases` — parameterized cases can't be
 enumerated; they get their own coverage above):
@@ -878,9 +878,9 @@ Implementation:
     }
 ```
 
-- [ ] **Step 4: Run the full suite** — expected PASS.
+- [x] **Step 4: Run the full suite** — expected PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(solver): fixedColumns and fixedGrid zone presets"
@@ -894,7 +894,7 @@ git add -A && git commit -m "feat(solver): fixedColumns and fixedGrid zone prese
 - Modify: `Sources/FerriteCore/GroupLayoutSolver.swift` (enum declarations)
 - Test: `Tests/FerriteCoreTests/PresetCodableTests.swift` (create)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import XCTest
@@ -921,9 +921,9 @@ final class PresetCodableTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — compile FAILURE: `Preset` does not conform to `Codable`.
+- [x] **Step 2: Run to verify failure** — compile FAILURE: `Preset` does not conform to `Codable`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Swift synthesizes Codable for enums with associated values; conformance is
 declaration-only:
@@ -936,9 +936,9 @@ declaration-only:
     public enum TreemapBias: Equatable, Codable {
 ```
 
-- [ ] **Step 4: Run the full suite** — expected PASS.
+- [x] **Step 4: Run the full suite** — expected PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(solver): Preset and TreemapBias are Codable"
@@ -952,7 +952,7 @@ git add -A && git commit -m "feat(solver): Preset and TreemapBias are Codable"
 - Modify: `Sources/FerriteCore/MagnetScale.swift`
 - Test: `Tests/FerriteCoreTests/MagnetScaleRemapTests.swift` (create)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import XCTest
@@ -981,9 +981,9 @@ final class MagnetScaleRemapTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — compile FAILURE: no member `remap`.
+- [x] **Step 2: Run to verify failure** — compile FAILURE: no member `remap`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `MagnetScale` (after `settle`):
 
@@ -1006,9 +1006,9 @@ Add to `MagnetScale` (after `settle`):
     }
 ```
 
-- [ ] **Step 4: Run the full suite** — expected PASS.
+- [x] **Step 4: Run the full suite** — expected PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(core): MagnetScale.remap for group-as-tile reflow"
@@ -1022,7 +1022,7 @@ git add -A && git commit -m "feat(core): MagnetScale.remap for group-as-tile ref
 - Create: `Sources/FerriteCore/ReflowStore.swift`
 - Test: `Tests/FerriteCoreTests/ReflowStoreTests.swift` (create)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```swift
 import XCTest
@@ -1083,9 +1083,9 @@ final class ReflowStoreTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run to verify failure** — compile FAILURE.
+- [x] **Step 2: Run to verify failure** — compile FAILURE.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `Sources/FerriteCore/ReflowStore.swift`:
 
@@ -1162,9 +1162,9 @@ public final class ReflowStore {
 }
 ```
 
-- [ ] **Step 4: Run the full suite** — expected PASS.
+- [x] **Step 4: Run the full suite** — expected PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(core): ReflowStore - custom presets and display-reflow group policy"
@@ -1180,7 +1180,7 @@ git add -A && git commit -m "feat(core): ReflowStore - custom presets and displa
 No unit tests (AppKit drawing, verified live); the compiler enforces switch
 exhaustiveness, which is the real guard here.
 
-- [ ] **Step 1: Per-preset tile counts**
+- [x] **Step 1: Per-preset tile counts**
 
 Replace the constant `tileCount` (line 15) with a function, and use it in
 `draw` (line 38):
@@ -1214,7 +1214,7 @@ In `draw`, replace both uses of the old constant:
         }
 ```
 
-- [ ] **Step 2: `readsWeights` gains the new cases**
+- [x] **Step 2: `readsWeights` gains the new cases**
 
 ```swift
     private static func readsWeights(_ preset: GroupLayoutSolver.Preset) -> Bool {
@@ -1227,7 +1227,7 @@ In `draw`, replace both uses of the old constant:
     }
 ```
 
-- [ ] **Step 3: Monocle double border**
+- [x] **Step 3: Monocle double border**
 
 At the end of `draw`, distinguish the lone full tile from a one-window glyph:
 
@@ -1243,13 +1243,13 @@ At the end of `draw`, distinguish the lone full tile from a one-window glyph:
         }
 ```
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 Run: `swift build 2>&1 | tail -3`
 Expected: `Build complete!` — if any switch over `Preset` elsewhere fails to
 compile, that file belongs to a later task; note it and stub nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "feat(glyphs): per-preset tile counts, weights map, monocle border"
@@ -1266,7 +1266,7 @@ git add -A && git commit -m "feat(glyphs): per-preset tile counts, weights map, 
 No unit surface (AX layer); verified live in Task 13. The steps below are the
 complete code changes.
 
-- [ ] **Step 1: Coordinator owns a `ReflowStore` and a change hook**
+- [x] **Step 1: Coordinator owns a `ReflowStore` and a change hook**
 
 In `PersistenceCoordinator`, next to `layoutLibraryStore` construction
 (init, ~line 73):
@@ -1306,7 +1306,7 @@ Accessors (near `loadBundles`):
     }
 ```
 
-- [ ] **Step 2: Split `reflowDisplay` / add `reflowGroup`**
+- [x] **Step 2: Split `reflowDisplay` / add `reflowGroup`**
 
 Replace the existing `reflowDisplay` (~line 204):
 
@@ -1373,7 +1373,7 @@ argument today; move it, do not duplicate it — one identity path, finding 20.)
 Also update the old `outcome.group` bookkeeping: `lastGroupPreset` is now set
 only in `reflowGroup`; display reflow never sets it.
 
-- [ ] **Step 3: `DisplayGroupReflow` loses the frontmost-group override**
+- [x] **Step 3: `DisplayGroupReflow` loses the frontmost-group override**
 
 In `DisplayGroupReflow.swift`:
 
@@ -1471,13 +1471,13 @@ when editing; the struct carries window + frame + identity today.
 match; if the current `Member` struct lacks them, add them from the identity
 resolution that already happens during enumeration (lines 124-150).
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 Run: `swift build 2>&1 | tail -3`
 Expected: FAILURE only in `StatusMenuController.swift` (its `reflowPreset`
 still calls the old API) — that is Task 11. Everything else compiles.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Sources/Ferrite/PersistenceCoordinator.swift Sources/Ferrite/DisplayGroupReflow.swift
@@ -1491,7 +1491,7 @@ git commit -m "feat: explicit display/group reflow targets with explode-or-keep 
 **Files:**
 - Modify: `Sources/Ferrite/StatusMenuController.swift`
 
-- [ ] **Step 1: Preset list — built-ins in spec order, then customs**
+- [x] **Step 1: Preset list — built-ins in spec order, then customs**
 
 Replace `reflowPresets` (lines 112-123):
 
@@ -1523,7 +1523,7 @@ Replace `reflowPresets` (lines 112-123):
     }
 ```
 
-- [ ] **Step 2: Glyph rows wrap at 8, parameterized by target**
+- [x] **Step 2: Glyph rows wrap at 8, parameterized by target**
 
 Replace `presetRow()` (lines 127-153). The reflow target rides in the
 button's cell via `identifier`; the tag stays the preset index:
@@ -1576,7 +1576,7 @@ button's cell via `identifier`; the tag stays the preset index:
 Preserve any existing button styling lines from the current `presetRow()`
 (lines 133-142) not repeated here — this is a restructure, not a restyle.
 
-- [ ] **Step 3: Menu construction — two sections + policy toggle**
+- [x] **Step 3: Menu construction — two sections + policy toggle**
 
 Replace lines 29-36 of `menuNeedsUpdate`:
 
@@ -1608,7 +1608,7 @@ Replace lines 29-36 of `menuNeedsUpdate`:
 ~line 359 and keep that meaning; if it means merely "has ≥2 open windows",
 use the summary field that identifies the frontmost-owning group instead.)
 
-- [ ] **Step 4: Per-group glyph rows in the Groups submenu**
+- [x] **Step 4: Per-group glyph rows in the Groups submenu**
 
 In `groupItem(_:)` (line 163), after the `Ungroup` item (line 188):
 
@@ -1618,7 +1618,7 @@ In `groupItem(_:)` (line 163), after the `Ungroup` item (line 188):
         submenu.addItem(presetRows(target: ReflowTarget.group(group.id)))
 ```
 
-- [ ] **Step 5: Action routes by target**
+- [x] **Step 5: Action routes by target**
 
 Replace `reflowPreset` (lines 252-257) and add the toggle:
 
@@ -1644,12 +1644,12 @@ Replace `reflowPreset` (lines 252-257) and add the toggle:
     }
 ```
 
-- [ ] **Step 6: Build and full suite**
+- [x] **Step 6: Build and full suite**
 
 Run: `swift build 2>&1 | tail -3 && swift test 2>&1 | grep -E "Executed" | tail -1`
 Expected: build complete, tests PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A && git commit -m "feat(menu): display and group reflow rows, wrapped glyphs, keep-groups toggle"
@@ -1663,7 +1663,7 @@ git add -A && git commit -m "feat(menu): display and group reflow rows, wrapped 
 - Create: `Sources/Ferrite/ReflowsPreferencesView.swift`
 - Modify: `Sources/Ferrite/PreferencesWindowController.swift`
 
-- [ ] **Step 1: View + model**
+- [x] **Step 1: View + model**
 
 Create `Sources/Ferrite/ReflowsPreferencesView.swift`:
 
@@ -1867,7 +1867,7 @@ final class ReflowsPreferencesModel: ObservableObject {
 }
 ```
 
-- [ ] **Step 2: Wire the tab**
+- [x] **Step 2: Wire the tab**
 
 In `PreferencesWindowController`: add a retained `reflowsModel` (same pattern
 as `layoutsModel`, lines 8-9 and 27-30), reload it in the re-show branch
@@ -1881,12 +1881,12 @@ as `layoutsModel`, lines 8-9 and 27-30), reload it in the re-show branch
 (`PreferencesRootView` gains a third `@ObservedObject`; thread it through the
 `NSHostingController` init the same way the other two models are.)
 
-- [ ] **Step 3: Build and full suite**
+- [x] **Step 3: Build and full suite**
 
 Run: `swift build 2>&1 | tail -3 && swift test 2>&1 | grep -E "Executed" | tail -1`
 Expected: build complete, tests PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A && git commit -m "feat(prefs): Reflows tab - custom presets editor and group policy"
@@ -1901,7 +1901,7 @@ git add -A && git commit -m "feat(prefs): Reflows tab - custom presets editor an
 - Modify: `docs/BACKLOG.md` (shipped table + acceptance note after the live run)
 - Modify: `docs/HANDOFF.md` (state line)
 
-- [ ] **Step 1: GUIDE updates**
+- [x] **Step 1: GUIDE updates**
 
 - Menu table: replace the single reflow row's description with the two-row
   structure, the keep-groups toggle, and per-group submenu rows.
@@ -1912,13 +1912,13 @@ git add -A && git commit -m "feat(prefs): Reflows tab - custom presets editor an
   policy with its default.
 - Preferences section: describe the Reflows tab.
 
-- [ ] **Step 2: BACKLOG + HANDOFF**
+- [x] **Step 2: BACKLOG + HANDOFF**
 
 - Move the M6 "Next" bullet into the shipped table as `v0.12.0-m6` **after**
   live acceptance passes (Step 4) — not before.
 - HANDOFF state line: mention M6 shipped.
 
-- [ ] **Step 3: Install**
+- [x] **Step 3: Install**
 
 ```bash
 ./scripts/install.sh
@@ -1977,3 +1977,77 @@ git push origin main v0.12.0-m6
   `GroupSummary` field names); both tasks say to resolve against the live
   struct rather than invent fields, and finding 20 (one identity path)
   governs the member-resolution move.
+
+---
+
+## Post-execution record (2026-08-28)
+
+All 14 tasks executed via subagent-driven development. 17 code commits
+`fd51fb2`..`fa6d51d`, then docs. **253 unit tests, 0 failures**; build clean;
+no `default:` arm over any Ferrite enum. Live acceptance (Task 13 Step 4) and
+the `v0.12.0-m6` tag (Step 5) remain open — the only two unticked steps above.
+
+### Defects in this plan, found during execution
+
+- **Task 10's dissolve was unscoped — a real bug in the plan text.**
+  `dissolveGroupsTouchedByDisplayReflow` as specified iterated *every* group
+  and ungrouped any with 2+ live members, so an explode-mode reflow of display
+  A dissolved a group living entirely on display B that was never moved. The
+  implementer built it as written and flagged it rather than silently patching.
+  Fixed in `1a19082`: `applyToDisplay` now returns a `DisplayOutcome` carrying
+  the written window ids, and a group is dissolved iff the reflow actually
+  wrote at least one of its live members. Lesson: the function name asserted
+  "touched" while nothing verified it (finding 18's territory).
+- **Task 0's A1 rationale was wrong.** The plan said the
+  `resize?.resizeMode ?? group.resizeMode` fallback covers "the first resized
+  event, before the session exists". It does not: `openResize` runs *before*
+  the propagate call, so a real gesture always has a session. The fallback
+  actually fires when `openResize` declined — programmatic resize with no
+  button held, fewer than two live members, or a pending session for another
+  window. The comment in the code states the real reason.
+- **Cascade is 70% of each dimension, not 70% of the area** (≈49% of area).
+  The GUIDE says the correct thing; the plan's prose did not.
+- **`DisplayGroupReflow.Member` carries no slot**, so the keep-mode group match
+  could not use `(bundleID, slot)` as the plan assumed. Resolved by matching
+  `DriverWindow.id` against `coordinator.liveMembers(of:)` — the coordinator's
+  own certain-identity resolution — rather than adding a second identity path
+  (finding 20). `DriverWindow.id` is `Int`, not `CGWindowID`.
+- **`readsWeights` and `allBasicCases` were maintained incrementally** by each
+  solver task (each new case broke the exhaustive switch), so Task 9's real
+  scope shrank to per-preset tile counts plus the monocle border.
+- **`cascade` and `monocle` are deliberately absent from `allBasicCases`**:
+  that array feeds an exhaustive pairwise non-overlap sweep, and both presets
+  overlap by design. `bsp` was added and verified to satisfy the sweep at
+  counts 1–7. The parameterized cases cannot be enumerated there at all.
+
+### Two unplanned commits, both from review findings
+
+A mutation-style review built deliberately-broken solver variants and confirmed
+they passed the committed assertions — i.e. the tests were too weak, not the
+code wrong:
+
+- `cb67020` — `mainSideMirrored`'s side-stack order and cardinality were
+  unpinned; any permutation of the three side tiles passed.
+- `e9f6bcf` — the four order-based presets (`bsp`, `cascade`, `fixedColumns`,
+  `fixedGrid`) were only ever tested at uniform weights, so a weight sort could
+  have been introduced into any of them undetected; cascade's stagger was
+  pinned only on x; and `mainCenter`'s weight sort, the `max(1, …)` guards that
+  stop `index % 0` trapping, and the 0.2–0.9 fraction clamp were all untested.
+
+### Process deviations
+
+- The `reviewer` agent type hit an account rate limit (~15 h retry) on the
+  first dispatch, so reviews ran on standard `task` agents with spec-compliance
+  and code-quality combined into one read-only pass per batch, inspecting via
+  `git show <SHA>` so a concurrent implementer's working tree was never read.
+- Implementers ran strictly one at a time (the skill's rule), but read-only
+  reviewers overlapped with the next implementer where file sets were disjoint.
+
+### Discovered, deferred
+
+Exclusion does not reach windows already inside a magnet group (mate-then-
+exclude ordering). Found while answering a question about excluding Finder from
+grouping; documented in GUIDE with a workaround and tracked in `BACKLOG.md`
+under Next. Deferred deliberately so M6's live acceptance tests one known
+state, since the fix touches `liveMembers(of:)` — the path every magnet gesture
+in the protocol runs through.
