@@ -6,6 +6,16 @@ primary source). Purpose: what *basic* tiling features Ferrite lacks for
 parity, filtered through Ferrite's philosophy — **not an auto-tiler; windows
 stay free-floating; structure is opt-in**.
 
+> **Read as of 2026-08-25.** The gap table below is about **single-window snap
+> actions** (placing one window at a screen fraction), which is still unbuilt
+> and remains the M5 candidate. It is a different axis from *reflow*, which
+> arranges every window on a display or in a group at once. M6 has since
+> shipped a BSP dwindle spiral, cascade, monocle, main-centre, mirrored
+> main+side, and user-defined X×Y grid presets as reflows — so two rows below
+> ("auto-tiling layouts", "sixths/ninths/eighths") now describe only what
+> Ferrite lacks as a *snap* action, not what it can arrange. Nothing else in
+> the table has changed.
+
 ## The field, by philosophy
 
 | Tier | Tools | Model |

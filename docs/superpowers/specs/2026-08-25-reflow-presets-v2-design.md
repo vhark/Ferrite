@@ -29,8 +29,8 @@ All pure geometry, Linux-portable, property-tested like the existing six.
 | Case | Semantics | Weights |
 |---|---|---|
 | `mainCenter(fraction: Double, sideCapacity: Int?)` | Heaviest tile centered at `fraction` of width; the remaining `(1 − fraction)` splits into two equal-width side columns, `(1 − fraction)/2` each. Remaining tiles fill the side stacks alternating (2nd → left, 3rd → right, …). `sideCapacity` caps each stack; overflow cycles back through side cells z-stacked. `nil` = unlimited (stacks grow). Built-in glyph uses `(0.6, nil)`. | reads |
-| `bsp` | Dwindle spiral: recursive half-splits alternating vertical/horizontal, first split vertical, heaviest tile first. Even 50/50 splits in v1; weighted split ratios are a noted extension, not scoped. | ignores (v1) |
-| `cascade` | Every tile sized to 70% of bounds, staggered diagonally from top-left by a fixed step chosen so the last window's stagger still fits (step = remaining space / (count−1), capped at 40pt). Back-to-front placement; frontmost tile ends nearest bottom-right and on top. | ignores |
+| `bsp` | Dwindle spiral: recursive half-splits alternating vertical/horizontal, first split vertical. Even 50/50 splits in v1; weighted split ratios are a noted extension, not scoped. Placement follows the caller's front-to-back tile order rather than sorting by weight — which is the same thing, since callers pass frontmost (heaviest) first. | ignores |
+| `cascade` | Every tile sized to 70% of the bounds' width and height (≈49% of its area), staggered diagonally from top-left by a fixed step chosen so the last window's stagger still fits (step = remaining space / (count−1), capped at 40pt). Back-to-front placement; frontmost tile ends nearest bottom-right and on top. | ignores |
 | `monocle` | Every tile = full bounds (minus gap). Z-order untouched. | ignores |
 
 ### Custom (parameterized) cases
@@ -74,11 +74,20 @@ in the menu**:
   their groups are dissolved (exact `ungroup` semantics — membership removed,
   same code path as the Groups menu's Ungroup). Never leave a "group" whose
   members are scattered: stale membership with broken adjacency is the
-  troubleshooting footgun the guide already warns about.
-- **Keep groups.** Each intact group (≥2 open windows) is one tile: the
-  solver places its bounding box, and members remap into the assigned cell via
-  the existing `MagnetScale` machinery (M3c). Ungrouped windows are tiles as
-  before. Group weight = sum of member weights.
+  troubleshooting footgun the guide already warns about. **Scoping (corrected
+  during implementation):** a group is dissolved if and only if the reflow
+  actually wrote at least one of its live member windows. Dissolving every
+  group with two or more live members — as this spec originally implied —
+  discarded membership for groups on *other* displays that the reflow never
+  touched, which finding 18 forbids.
+- **Keep groups.** Each intact group (≥2 eligible windows on that display) is
+  one tile: the solver places its bounding box, and members remap into the
+  assigned cell via `MagnetScale.remap` (M3c machinery). Ungrouped windows are
+  tiles as before. **As built:** the group tile is keyed by its frontmost
+  eligible member's window id and carries that member's z-derived weight, so
+  the group weighs exactly what that window would have weighed alone — rather
+  than the sum of member weights this spec first proposed, which would have
+  made a group outrank every solo window purely by size of membership.
 
 Indication: a checkmark menu item directly under the display glyph row —
 "Keep magnet groups together" — reading and writing the same stored policy
