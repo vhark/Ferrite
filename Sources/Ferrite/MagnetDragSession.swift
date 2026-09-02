@@ -416,10 +416,15 @@ final class MagnetDragSession {
         let groups = coordinator.magnetGroups()
         guard !groups.isEmpty else { return }
         let point = ScreenGeometry.cgPoint(fromNS: NSEvent.mouseLocation)
+        // Only grouped windows can be unmated, so only their bundles are worth
+        // an AX round trip. Sweeping every running app here would put dozens
+        // of synchronous AX calls on every left click the user makes.
+        let groupedBundles = Set(groups.flatMap { $0.members.map(\.bundleID) })
         // Grouped windows under the cursor, identity resolved the same
         // certain-only way `handleResized` does.
         var hits: [(window: Neighbour, slot: Int)] = []
-        for window in eligibleWindows() where window.frame.contains(point) {
+        for window in eligibleWindows(limitedTo: groupedBundles)
+        where window.frame.contains(point) {
             guard let slot = coordinator.slot(forWindowID: window.windowID,
                                               bundleID: window.bundleID),
                   groups.contains(where: {
@@ -744,7 +749,12 @@ final class MagnetDragSession {
 
     /// Every window mating may consider: standard windows of unhidden regular
     /// apps, minus Ferrite itself and minus the exclude list.
-    private func eligibleWindows() -> [Neighbour] {
+    ///
+    /// `limitedTo` narrows the AX sweep to a set of bundles. Each bundle costs
+    /// a synchronous AX round trip, so a caller that can only act on a handful
+    /// of apps must not pay for every app the user has open — see
+    /// `handleMouseDown`, which runs on every single left click.
+    private func eligibleWindows(limitedTo bundleIDs: Set<String>? = nil) -> [Neighbour] {
         let excluded = coordinator.currentExcludedBundleIDs
         var result: [Neighbour] = []
         var seen = Set<String>()
@@ -754,6 +764,7 @@ final class MagnetDragSession {
                   bundleID != Bundle.main.bundleIdentifier,
                   !excluded.contains(bundleID),
                   seen.insert(bundleID).inserted else { continue }
+            if let bundleIDs, !bundleIDs.contains(bundleID) { continue }
             for window in driver.windows(ofBundleID: bundleID) {
                 result.append(Neighbour(windowID: window.id, bundleID: bundleID,
                                         pid: window.pid, frame: window.frame))
