@@ -17,6 +17,12 @@ final class MagnetDragSession {
     /// enough that the user's next gesture is not swallowed.
     private static let suppressionWindow: TimeInterval = 0.4
 
+    /// How far a window must actually travel before a release counts as a
+    /// drag-away rather than a click. Deliberately small: a real drag-away
+    /// crosses tens of points, while a click that merely focuses or raises a
+    /// window travels zero. Measured in points, on the window, not the mouse.
+    private static let clickTravelTolerance: CGFloat = 4
+
     private let driver: MacWindowDriver
     private let monitor: WorkspaceMonitor
     private unowned let coordinator: PersistenceCoordinator
@@ -110,6 +116,11 @@ final class MagnetDragSession {
             var anchorOffset: CGVector
         }
         var cluster: Cluster?
+        /// The dragged window's frame when the session opened. A gesture that
+        /// never moves the window must not change membership, so the release
+        /// test compares against this rather than assuming any session that
+        /// opened was a drag-away.
+        let startFrame: CGRect
         /// The dragged window's frame at the most recent moved event, for the
         /// release-time adjacency test.
         var lastFrame: CGRect
@@ -250,6 +261,7 @@ final class MagnetDragSession {
                     mouseUpMonitor: mouseUp,
                     candidate: nil,
                     cluster: cluster,
+                    startFrame: event.frame,
                     lastFrame: event.frame)
         trace("session mode=\(cluster == nil ? "plain" : "cluster") " +
               "followers=\(cluster?.followers.count ?? 0)")
@@ -339,6 +351,19 @@ final class MagnetDragSession {
     /// unioning the groups. Unresolvable identity → no membership change:
     /// geometry may move, memory only changes when identity is certain.
     private func unmateIfReleasedAway(_ open: Drag, releasedAt released: CGRect) {
+        // A gesture that never moved the window is not a drag-away, whatever
+        // opened the session. Clicking a title bar to focus or raise a window
+        // can emit a moved notification carrying an unchanged frame, and
+        // dropping a window out of its group on a plain click is damage the
+        // user never asked for. Drag-away stays intentional; a click does not
+        // count as one.
+        let travel = hypot(released.minX - open.startFrame.minX,
+                           released.minY - open.startFrame.minY)
+        guard travel > Self.clickTravelTolerance else {
+            trace("no membership change for \(open.bundleID) win=\(open.windowID): " +
+                  "released \(travel)pt from where the gesture started")
+            return
+        }
         guard let slot = coordinator.slot(forWindowID: open.windowID,
                                           bundleID: open.bundleID) else { return }
         guard let group = coordinator.magnetGroups().first(where: {
@@ -546,6 +571,22 @@ final class MagnetDragSession {
         // with a settle.
         openResize(for: event, previous: previous,
                    resizeMode: group.resizeMode, live: live)
+        // Live propagation is only ever correct for a resize a hand is
+        // actively dragging. `openResize` already encodes that test (it
+        // declines anything with no mouse button held), so requiring its
+        // session here closes the hole the old `?? group.resizeMode` fallback
+        // left open: a window zoom (title-bar double-click or the maximize
+        // button) and Ferrite's own reflow writes both arrive with no button
+        // down, and propagating them squished mates irreversibly, because
+        // propagation only follows a shared edge and can never restore a size
+        // it destroyed (finding 27). A global mouse-down watcher cannot fix
+        // this on its own: it is observe-only, so the zoom's resize can reach
+        // us before the watcher's callback runs.
+        guard let session = resize else {
+            trace("resize win=\(event.windowID) now=\(event.frame): no session " +
+                  "(no button held), mates untouched")
+            return
+        }
         var frames = Dictionary(live.map { ($0.window.id, $0.window.frame) },
                                 uniquingKeysWith: { first, _ in first })
         // The driver's enumeration can trail the notification by a frame.
@@ -556,13 +597,10 @@ final class MagnetDragSession {
                                            changed: event.windowID,
                                            previous: previous,
                                            // One gesture, one mode: the session's
-                                           // open-time snapshot wins, so flipping the
-                                           // group's mode mid-gesture cannot make live
-                                           // propagation and the settle disagree. The
-                                           // group is the fallback only when no session
-                                           // is open — `openResize` declines programmatic
-                                           // resizes — where there is one mode anyway.
-                                           mode: resize?.resizeMode ?? group.resizeMode,
+                                           // open-time snapshot, so flipping the
+                                           // group's mode mid-gesture cannot make
+                                           // live propagation and the settle disagree.
+                                           mode: session.resizeMode,
                                            gap: Self.gap)
         trace("resize win=\(event.windowID) previous=\(previous) now=\(event.frame) " +
               "mode=\(group.resizeMode) mates=\(frames.count - 1) moves=\(moves.count)")
