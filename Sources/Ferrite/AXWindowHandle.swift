@@ -30,9 +30,24 @@ final class AXWindowHandle {
         (copyValue(kAXMinimizedAttribute) as? Bool) == true
     }
 
-    var frame: CGRect? {
-        guard let positionValue = copyValue(kAXPositionAttribute),
-              let sizeValue = copyValue(kAXSizeAttribute),
+    var frame: CGRect? { Self.frame(of: element) }
+
+    /// The zoom (green) button's frame in CG space, when the window has one.
+    /// Used to tell "the user clicked maximize" from "something resized this
+    /// window", which AX itself cannot distinguish.
+    var zoomButtonFrame: CGRect? {
+        guard let value = copyValue(kAXZoomButtonAttribute),
+              CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        // Type id checked above, so the cast is as safe as the `as! AXValue`
+        // the frame unpacking below does.
+        return Self.frame(of: value as! AXUIElement)
+    }
+
+    /// Position + size of any AX element as one rect. Shared by the window's
+    /// own frame and its chrome buttons' — one unpacking path, not two.
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        guard let positionValue = copyValue(kAXPositionAttribute, of: element),
+              let sizeValue = copyValue(kAXSizeAttribute, of: element),
               CFGetTypeID(positionValue) == AXValueGetTypeID(),
               CFGetTypeID(sizeValue) == AXValueGetTypeID() else { return nil }
         var point = CGPoint.zero
@@ -61,6 +76,11 @@ final class AXWindowHandle {
     }
 
     private func copyValue(_ attribute: String) -> CFTypeRef? {
+        Self.copyValue(attribute, of: element)
+    }
+
+    private static func copyValue(_ attribute: String,
+                                  of element: AXUIElement) -> CFTypeRef? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success
         else { return nil }

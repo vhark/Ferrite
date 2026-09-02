@@ -42,4 +42,17 @@ final class MacWindowDriver: WindowDriving {
     func handle(forWindowID id: Int) -> AXWindowHandle? {
         handleCache[id]
     }
+
+    /// Zoom-button frame for one window, or nil when it has none. macOS only
+    /// by nature, so it lives on the concrete driver and NOT on the portable
+    /// `WindowDriving` protocol a Linux port would implement.
+    ///
+    /// Resolves through the cache from the most recent enumeration of that
+    /// bundle, the same path `setFrame` takes; the bundle check keeps a stale
+    /// id belonging to another app out.
+    func zoomButtonFrame(ofWindowID windowID: Int, bundleID: String) -> CGRect? {
+        guard idsByBundle[bundleID]?.contains(windowID) == true,
+              let handle = handleCache[windowID] else { return nil }
+        return handle.zoomButtonFrame
+    }
 }

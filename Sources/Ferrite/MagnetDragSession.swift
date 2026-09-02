@@ -28,11 +28,19 @@ final class MagnetDragSession {
         self.driver = driver
         self.monitor = monitor
         self.coordinator = coordinator
+        // Persistent, not per gesture: the click that maximizes a window is
+        // the FIRST event of the interaction, so there is no session open to
+        // hang it off. See `handleMouseDown`.
+        maximizeWatch = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown]) { [weak self] event in
+            self?.handleMouseDown(event)
+        }
     }
 
     deinit {
         endDrag()
         endResize()
+        if let maximizeWatch { NSEvent.removeMonitor(maximizeWatch) }
     }
 
     /// Live tracing, enabled with `FERRITE_TRACE_DRAG=1`.
@@ -69,6 +77,9 @@ final class MagnetDragSession {
     private struct Neighbour {
         let windowID: Int
         let bundleID: String
+        /// Needed to pair the window with its CGWindowList entry when several
+        /// grouped windows overlap the cursor.
+        let pid: pid_t
         let frame: CGRect
     }
 
@@ -381,6 +392,92 @@ final class MagnetDragSession {
               + "certainly identifies %@ window %d", bundleID, windowID)
     }
 
+    // MARK: - Unmate on maximize
+
+    /// The persistent `.leftMouseDown` monitor behind `handleMouseDown`.
+    private var maximizeWatch: Any?
+
+    /// Takes a grouped window out of its group when the user maximizes it,
+    /// BEFORE the resulting resize reaches `handleResized` — whose group
+    /// lookup then finds nothing, so the mates are never propagated into.
+    /// They have to be spared rather than repaired: shared-edge propagation is
+    /// relative, not reversible, so once a zoom has squished them to the screen
+    /// edges the un-zoom cannot put their sizes back.
+    ///
+    /// Detects the CAUSE (a click on the window's chrome) rather than the
+    /// effect (a frame that now fills its display), because
+    /// `DisplayGroupReflow.write` does not register suppression in this class:
+    /// a `monocle` reflow hands every member the group's full box, so a
+    /// geometric rule would fire on Ferrite's own writes and dissolve the group
+    /// it had just arranged. No frame write can produce a mouse click.
+    private func handleMouseDown(_ event: NSEvent) {
+        // Cheapest question first: an ungrouped setup pays one array check per
+        // click and touches AX not at all.
+        let groups = coordinator.magnetGroups()
+        guard !groups.isEmpty else { return }
+        let point = ScreenGeometry.cgPoint(fromNS: NSEvent.mouseLocation)
+        // Grouped windows under the cursor, identity resolved the same
+        // certain-only way `handleResized` does.
+        var hits: [(window: Neighbour, slot: Int)] = []
+        for window in eligibleWindows() where window.frame.contains(point) {
+            guard let slot = coordinator.slot(forWindowID: window.windowID,
+                                              bundleID: window.bundleID),
+                  groups.contains(where: {
+                      $0.contains(bundleID: window.bundleID, slot: slot)
+                  })
+            else { continue }
+            hits.append((window, slot))
+        }
+        guard let hit = frontmostHit(hits) else { return }
+
+        // The zoom button is unambiguous: a click anywhere in it maximizes,
+        // whatever the click count.
+        let zoom = driver.zoomButtonFrame(ofWindowID: hit.window.windowID,
+                                         bundleID: hit.window.bundleID)
+        let onZoomButton = zoom?.contains(point) == true
+        // A title-bar double-click only zooms when the system says it does. An
+        // ABSENT AppleActionOnDoubleClick means the factory default, Maximize;
+        // "Minimize" and "None" never zoom anything, and dissolving the user's
+        // group on a gesture that does not resize would be pure damage.
+        let doubleClickAction = UserDefaults.standard
+            .string(forKey: "AppleActionOnDoubleClick")
+        let doubleClickZooms = doubleClickAction == nil
+            || doubleClickAction == "Maximize"
+        let onTitleBar = event.clickCount == 2 && doubleClickZooms
+            && WindowChrome.isInTitleBar(point, of: hit.window.frame)
+        let matched = onZoomButton ? "zoom-button" : (onTitleBar ? "title-bar" : "none")
+        // Traced either way: this hit test can only be validated against real
+        // chrome on real hardware, so the decision has to be readable there.
+        trace("maximize watch \(hit.window.bundleID)#\(hit.slot) " +
+              "win=\(hit.window.windowID) point=\(point.x),\(point.y) " +
+              "frame=\(hit.window.frame) clicks=\(event.clickCount) " +
+              "zoomButton=\(zoom.map { "\($0)" } ?? "none") " +
+              "doubleClickAction=\(doubleClickAction ?? "unset(=Maximize)") " +
+              "matched=\(matched)")
+        guard onZoomButton || onTitleBar else { return }
+        // One identity path: the same removal `unmateIfReleasedAway` uses.
+        coordinator.unmate(bundleID: hit.window.bundleID, slot: hit.slot)
+    }
+
+    /// The frontmost of the grouped windows under the cursor. Overlap is the
+    /// normal case for stacked windows, and only the one the user can actually
+    /// see the chrome of was clicked. Same z-order machinery
+    /// `PersistenceCoordinator.backToFront` uses; zIndex 0 is frontmost, and
+    /// the CG sweep is skipped when there is nothing to disambiguate.
+    private func frontmostHit(_ hits: [(window: Neighbour, slot: Int)])
+        -> (window: Neighbour, slot: Int)? {
+        guard hits.count > 1 else { return hits.first }
+        let order = ZOrderMatcher.zIndices(
+            axWindows: hits.map {
+                ZOrderMatcher.AXRef(id: $0.window.windowID, pid: $0.window.pid,
+                                    frame: $0.window.frame)
+            },
+            cgFrontToBack: ZOrderCapture.frontToBack())
+        return hits.min {
+            (order[$0.window.windowID] ?? .max) < (order[$1.window.windowID] ?? .max)
+        }
+    }
+
     // MARK: - Resize propagation
 
     /// Frame at each window's previous RESIZED event. The no-op guard and
@@ -659,7 +756,7 @@ final class MagnetDragSession {
                   seen.insert(bundleID).inserted else { continue }
             for window in driver.windows(ofBundleID: bundleID) {
                 result.append(Neighbour(windowID: window.id, bundleID: bundleID,
-                                        frame: window.frame))
+                                        pid: window.pid, frame: window.frame))
             }
         }
         return result

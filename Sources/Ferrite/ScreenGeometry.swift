@@ -51,6 +51,15 @@ enum ScreenGeometry {
                       height: rect.height)
     }
 
+    /// Flips a Cocoa-space point (origin bottom-left, y upward, which is what
+    /// `NSEvent.mouseLocation` reports) into CG space, anchored to the primary
+    /// screen. Companion to `nsRect(fromCG:)`, kept here because this file owns
+    /// every NS-to-CG flip.
+    static func cgPoint(fromNS point: CGPoint) -> CGPoint {
+        guard let primary = NSScreen.screens.first else { return point }
+        return CGPoint(x: point.x, y: primary.frame.maxY - point.y)
+    }
+
     /// Current display configuration from attached screens.
     static var currentConfiguration: DisplayConfiguration {
         DisplayConfiguration(displays: NSScreen.screens.compactMap(displayInfo(for:)))
