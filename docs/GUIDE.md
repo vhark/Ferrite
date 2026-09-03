@@ -205,7 +205,7 @@ Gesture debugging: launch the binary with `FERRITE_TRACE_DRAG=1` in the environm
 
 Requirements: macOS 13+, Swift 5.9+ toolchain (Xcode or CLT).
 
-- `swift test` — 253 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
+- `swift test` — 259 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
 - `./scripts/make-app.sh` — builds and signs `build/Ferrite.app` (dev builds).
 - `./scripts/install.sh` — builds, installs to `/Applications`, registers Launch at Login. Also migrates state from a previous MacTLM install (one-shot, copy-never-delete) and retires the old app.
 - `./scripts/release.sh <version>` — cuts a public release: universal binary, Developer ID signing with hardened runtime, notarization, stapling, and the Homebrew cask bump. Operator runbook: [`docs/RELEASING.md`](RELEASING.md).

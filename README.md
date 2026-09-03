@@ -46,7 +46,7 @@ The full manual — every gesture, menu item, preference, CLI diagnostic, and tr
 
 ## Status
 
-macOS-first and used daily by its author. The core engine (`FerriteCore`) is pure Foundation with no AppKit dependency — the Linux port needs only a new window driver (sway/Hyprland IPC or EWMH). 253 unit tests; every feature was additionally verified by live protocol on real hardware before shipping.
+macOS-first and used daily by its author. The core engine (`FerriteCore`) is pure Foundation with no AppKit dependency — the Linux port needs only a new window driver (sway/Hyprland IPC or EWMH). 259 unit tests; every feature was additionally verified by live protocol on real hardware before shipping.
 
 ## Acknowledgments
 
