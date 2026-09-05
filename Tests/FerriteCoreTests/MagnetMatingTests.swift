@@ -70,20 +70,37 @@ final class MagnetMatingTests: XCTestCase {
 
     // MARK: - Regressions from the 2026-08-24 live trace
 
-    func testWellAlignedEdgesMateFromFurtherAwayThanAHandCanAim() {
-        // The exact shape of the live failure: edges 40pt apart with essentially
-        // perfect overlap read as an obvious mate to the user, but the original
-        // 24pt threshold rejected them and nothing ever mated.
-        let dragged = CGRect(x: 450, y: 100, width: 510, height: 800)
-        let reach = MagnetMating.evaluate(dragged: dragged, others: [(1, mate)])
+    func testAWellAlignedPairMatesWithinTheReachAndNotBeyondIt() {
+        // The whole history in one test: 24pt was tighter than a hand can aim
+        // on a 7680px display, 64pt was the first measured fix, 32pt is the
+        // current default — and the reach is now user-configurable, so what
+        // this pins is the RELATIONSHIP between reach and mating, not a magic
+        // number. Essentially perfect overlap either way; only distance moves.
+        let within = CGRect(x: 470, y: 100, width: 510, height: 800)
+        XCTAssertNotNil(MagnetMating.candidate(dragged: within, others: [(1, mate)]),
+                        "20pt apart and level: unmistakably a mate")
+        let beyond = CGRect(x: 450, y: 100, width: 510, height: 800)
+        let reach = MagnetMating.evaluate(dragged: beyond, others: [(1, mate)])
             .first { $0.edge == .right }
         XCTAssertEqual(reach?.distance ?? -1, 40, accuracy: 0.001,
                        "fixture guard: this must stay a 40pt reach")
+        XCTAssertNil(MagnetMating.candidate(dragged: beyond, others: [(1, mate)]),
+                     "40pt is past the 32pt default, so it must not mate")
     }
 
-    func testACornerGrazeIsStillRejectedAtTheLooserThreshold() {
+    func testACustomReachMovesTheMatingBoundary() {
+        // A pair 40pt apart with essentially perfect overlap: beyond the 32pt
+        // default, within a 64pt reach. The knob, not the geometry, decides.
+        let dragged = CGRect(x: 450, y: 100, width: 510, height: 800)
+        XCTAssertNil(MagnetMating.candidate(dragged: dragged, others: [(1, mate)]))
+        XCTAssertNotNil(MagnetMating.candidate(dragged: dragged, others: [(1, mate)],
+                                               threshold: 64))
+    }
+
+    func testACornerGrazeIsStillRejectedWithinTheReach() {
         // Distance alone must not authorise a mate: overlap is what stops
-        // accidents, which is why the threshold could be loosened at all.
+        // accidents, which is why the reach is safe to tune at all. 20pt
+        // apart, so inside any plausible reach setting.
         let dragged = CGRect(x: 490, y: 880, width: 500, height: 800)
         XCTAssertNil(MagnetMating.candidate(dragged: dragged, others: [(1, mate)]))
     }

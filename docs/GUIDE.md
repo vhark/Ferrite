@@ -101,13 +101,15 @@ The gesture vocabulary. All gestures use plain window dragging — no modes, no 
 
 | Gesture | Result |
 |---|---|
-| **Drag a window until its edge nears another's facing edge** (within ~64 pt, edges overlapping at least a quarter of the shorter side) | A blue bar previews the mate; release and the window snaps flush with an 8 pt gap. Both windows are now a group. If the perpendicular edges were within 24 pt of level, they're aligned; larger offsets are respected as deliberate. |
+| **Drag a window until its edge nears another's facing edge** (within the mate reach — 32 pt by default, adjustable — edges overlapping at least a quarter of the shorter side) | A blue bar previews the mate; release and the window snaps flush with an 8 pt gap. Both windows are now a group. If the perpendicular edges were within 24 pt of level, they're aligned; larger offsets are respected as deliberate. |
 | **Mate more windows onto a group** | They join it — groups merge transitively when clusters actually touch. |
 | **Plain-drag a member away and release** (flush with no fellow member) | It **leaves the group**. Groups dissolve below two members. Dragging a member from group A onto group B moves it A→B. |
 | **⌘-drag any member by its title bar** | Carries the **whole group**: the grabbed window moves live, the other members hold still while accent-colored outline ghosts glide in formation, and on release every member lands in one clean write. (Followers don't move live because writing into busy apps mid-drag lags; the ghosts are the honest, instant feedback.) |
 | **Drag a shared edge** (an edge two members meet at) | Per the group's **Resize mode**: **Standard** — only the window you resize changes, the mates stay exactly where they are; **Shrink** — the mate follows live, resizing with its far edge anchored; **Nudge** — the mate follows live, keeping its size and sliding, pushing its own mates down the chain. |
 | **Drag an outer edge** (no mate flush against it) | On release, the whole group **scales proportionally along that axis**, as if it were one combined window (except in **Standard**). |
 | **Drag an outer corner** (two unshared edges) | Scales the group along both axes on release (except in **Standard**). A corner mixing one shared and one outer edge does both: live shrink/nudge on the shared axis, proportional settle on the outer one. |
+
+**Mate reach.** How near the two facing edges must come before the blue preview appears is yours to set, in **Preferences → Magnets** (8–128 pt, stored in `magnets.json`). The default is **32 pt**: measured by hand, not chosen in a test, and safe to tune because what prevents accidental mates is the quarter-overlap requirement, not the distance — a corner-to-corner graze never mates however generous the reach. A smaller reach asks for more precise aim; a larger one offers the mate from further out. One catch below about 24 pt: perpendicular alignment is a fixed 24 pt, so once the reach is tighter than that, *every* mate also levels the perpendicular edges — nothing can be near enough to mate yet too far to straighten. Changing the setting takes effect on your next drag; no restart.
 
 **Standard mode.** In **Standard** neither the live propagation nor the proportional settle runs, so a shared edge, an outer edge and a corner all resize just the one window you grabbed. The group is still a group: ⌘-drag carries the cluster, and reflowing the group treats it as one, weights and all. Note that pulling a window well clear of its mates this way leaves it no longer touching them, so the next time you drag it and release it away from them, it leaves the group — dragging it back into contact keeps it (adjacency is live geometry, read at the release position, not a remembered fact).
 
@@ -170,6 +172,8 @@ Reflow moves *eligible* windows only: standard, non-minimized windows of visible
 - **Keep magnet groups together when reflowing a display** — the same setting as the menu checkmark under the display glyphs; either one moves both. Off by default (explode); see [Reflow presets](#reflow-presets) for what each policy does.
 - **Custom presets** — **Add** appends a preset, the name field renames it inline, the trash button deletes it, and the kind picker chooses Columns / Grid / Main centre (switching kind loads that kind's defaults). Steppers set the parameters: column count, grid columns and rows, centre percentage, per-side cap. The glyph beside each row is a live preview rendered by the solver itself, so it updates as you step and always shows the layout you'll actually get. Presets are stored in `reflows.json`, and the menu picks them up the next time you open it — no restart.
 
+**Magnets tab.** **Mate reach** — one slider, 8–128 pt in 4 pt steps, showing the current value in points; 32 pt by default. It sets how near a window's edge must come to another's before the blue preview appears and a release mates them, so a lower value asks for more precise aim. What keeps mates from happening by accident is the quarter-overlap requirement, not this distance. Below about 24 pt it has a second effect: perpendicular alignment is a fixed 24 pt, so a tighter reach means every mate also levels the perpendicular edges. Stored in `magnets.json` and read on your next drag — no restart. See [Magnet groups](#magnet-groups).
+
 ---
 
 ## Privacy
@@ -181,7 +185,7 @@ Ferrite's data files are designed to be synced (git, Nextcloud) without leaking 
 - **Pins are yours, not captured**: they're patterns you typed, matched against live titles in memory.
 - Losing the salt (e.g. wiping defaults) doesn't lose data, but every stored hash goes stale — matching degrades to pins and order until windows are re-captured.
 
-Data lives in `~/Library/Application Support/Ferrite/`: `layouts.json` (workspaces), `configurations/*.json` (per-display-set records and magnet groups), `exclude.json` (only written once you customize the list), `reflows.json` (custom reflow presets and the group policy). None of them contains a window title.
+Data lives in `~/Library/Application Support/Ferrite/`: `layouts.json` (workspaces), `configurations/*.json` (per-display-set records and magnet groups), `exclude.json` (only written once you customize the list), `reflows.json` (custom reflow presets and the group policy), `magnets.json` (the mate reach). None of them contains a window title.
 
 ---
 
@@ -238,7 +242,7 @@ First signing pops a keychain dialog — click **Always Allow** so future builds
 
 **Ferrite doesn't start at login.** Menu shows *Launch at Login (needs approval)* → allow Ferrite under System Settings → General → Login Items. `--login-status` prints the true registration state.
 
-**Mating feels grabby or won't trigger.** The reach is 64 pt with a quarter-overlap gate — a corner-to-corner graze never mates; near-parallel edges mate generously. If a gesture misbehaves, reproduce it once under `FERRITE_TRACE_DRAG=1` and read the candidate/miss lines; they name the failing requirement and the measured distances.
+**Mating feels grabby or won't trigger.** The reach is 32 pt by default (change it in Preferences → Magnets) with a quarter-overlap gate — a corner-to-corner graze never mates; near-parallel edges mate from anywhere inside the reach. If a gesture misbehaves, reproduce it once under `FERRITE_TRACE_DRAG=1` and read the candidate/miss lines; they name the failing requirement and the measured distances.
 
 **A group scales strangely.** Its members probably drifted apart (adjacency is live geometry). Re-mate the stragglers or Ungroup and rebuild.
 

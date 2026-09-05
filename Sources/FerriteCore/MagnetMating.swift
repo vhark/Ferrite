@@ -20,15 +20,23 @@ public enum MagnetMating {
         public let distance: CGFloat
     }
 
-    /// How near facing edges must be, in points, before they mate.
+    /// How near facing edges must be, in points, before they mate — the
+    /// DEFAULT only: the reach is user-configurable (`MagnetSettings`).
     ///
     /// Measured live on 2026-08-24: deliberate mating attempts were landing at
     /// 25-85pt with 0.98-1.00 perpendicular overlap — plainly intentional, yet
-    /// rejected by the original 24pt. Accidental mates are prevented by
-    /// `defaultMinimumOverlap`, not by this number (the one genuine near-miss
-    /// in the trace, a corner graze at 23pt, was rejected on overlap 0.02),
-    /// so distance can be generous without making mating surprising.
-    public static let defaultThreshold: CGFloat = 64
+    /// rejected by the original 24pt. What that trace really established is
+    /// that accidents are prevented by `defaultMinimumOverlap`, not by this
+    /// number (the one genuine near-miss, a corner graze at 23pt, was rejected
+    /// on overlap 0.02) — which is why distance is safe to tune at all. 64pt
+    /// was the first measured answer; 32pt is the user's own measured
+    /// preference, and it is a default rather than a law because the knob now
+    /// exists.
+    ///
+    /// Note `defaultAlignmentThreshold` is a fixed 24pt: configure the reach
+    /// below 24 and every mate also levels the perpendicular edges, because
+    /// nothing can then be near enough to mate yet too far to straighten.
+    public static let defaultThreshold: CGFloat = 32
     /// How near the *perpendicular* edges must be before mating also levels
     /// them. Deliberately tighter than `defaultThreshold`: reaching for a mate
     /// is a coarse gesture, but silently restyling an offset the user chose is

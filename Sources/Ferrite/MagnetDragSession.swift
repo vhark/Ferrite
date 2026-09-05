@@ -96,6 +96,11 @@ final class MagnetDragSession {
         /// dragged window moves during a drag, so re-enumerating AX for every
         /// moved event would cost a full sweep of every app at cursor rate.
         let neighbours: [Neighbour]
+        /// The configured mate reach, sampled once at session open — the same
+        /// stance as the ⌘ sample: a preference changed mid-drag does not
+        /// move the boundary the user is currently aiming at. Read from the
+        /// coordinator's in-memory copy, so no disk touches the gesture path.
+        let reach: CGFloat
         let mouseUpMonitor: Any?
         var candidate: MagnetMating.Candidate?
         struct Cluster {
@@ -177,7 +182,8 @@ final class MagnetDragSession {
         } else if let open = drag {
             let nearest = MagnetMating.evaluate(
                 dragged: event.frame,
-                others: open.neighbours.map { (id: $0.windowID, frame: $0.frame) })
+                others: open.neighbours.map { (id: $0.windowID, frame: $0.frame) },
+                threshold: open.reach)
             for evaluation in nearest.prefix(3) {
                 trace("  miss win=\(evaluation.mateID) \(evaluation.edge) " +
                       "dist=\(Int(evaluation.distance)) " +
@@ -258,6 +264,7 @@ final class MagnetDragSession {
         drag = Drag(windowID: event.windowID,
                     bundleID: event.bundleID,
                     neighbours: eligible.filter { $0.windowID != event.windowID },
+                    reach: coordinator.magnetSettings.mateReach,
                     mouseUpMonitor: mouseUp,
                     candidate: nil,
                     cluster: cluster,
@@ -274,6 +281,7 @@ final class MagnetDragSession {
         let others = neighbours(of: open, sharingDisplayWith: event.frame)
         let candidate = MagnetMating.candidate(dragged: event.frame,
                                                others: others,
+                                               threshold: open.reach,
                                                gap: Self.gap)
         open.candidate = candidate
         drag = open

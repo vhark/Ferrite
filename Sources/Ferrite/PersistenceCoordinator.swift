@@ -19,6 +19,11 @@ final class PersistenceCoordinator {
     private let excludeURL: URL
     let layoutLibraryStore: LayoutLibraryStore
     private let reflowStore: ReflowStore
+    private let magnetStore: MagnetSettingsStore
+    /// Held in memory, not re-read per gesture: `updateCandidate` runs on every
+    /// AX moved event during a drag, and the drag path must never touch disk
+    /// (same intent as ExcludeListBox).
+    private var storedMagnetSettings: MagnetSettings
     private(set) lazy var templateLauncher = TemplateLauncher(driver: driver,
                                                               coordinator: self,
                                                               engine: engine)
@@ -46,6 +51,9 @@ final class PersistenceCoordinator {
     /// so the menu and an open Reflows tab re-read — same lesson as
     /// onLayoutLibraryChanged (finding 16 corollary).
     var onReflowSettingsChanged: (() -> Void)?
+    /// Fires after a magnet-settings write so an open Preferences window
+    /// re-reads instead of showing a stale value (finding 16 corollary).
+    var onMagnetSettingsChanged: (() -> Void)?
 
     var currentExcludedBundleIDs: Set<String> { excludeList.bundleIDs }
 
@@ -78,6 +86,9 @@ final class PersistenceCoordinator {
         layoutLibraryStore = LayoutLibraryStore(
             url: supportDir.appendingPathComponent("layouts.json"))
         reflowStore = ReflowStore(url: supportDir.appendingPathComponent("reflows.json"))
+        magnetStore = MagnetSettingsStore(
+            url: supportDir.appendingPathComponent("magnets.json"))
+        storedMagnetSettings = magnetStore.load()
         // Legacy files (written before hashed identities) still carry plaintext
         // titles. Scrub every namespace once per launch, not just the one the
         // tracker loads: a raw-text check per file, rewriting only dirty ones.
@@ -525,6 +536,15 @@ final class PersistenceCoordinator {
         mutate(&settings)
         try? reflowStore.save(settings)
         onReflowSettingsChanged?()
+    }
+
+    /// The in-memory copy: safe to read from the drag path.
+    var magnetSettings: MagnetSettings { storedMagnetSettings }
+
+    func updateMagnetSettings(_ mutate: (inout MagnetSettings) -> Void) {
+        mutate(&storedMagnetSettings)
+        try? magnetStore.save(storedMagnetSettings)
+        onMagnetSettingsChanged?()
     }
 
     /// Single funnel for library writes: every mutation notifies open UI.

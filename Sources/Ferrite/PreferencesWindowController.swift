@@ -8,6 +8,7 @@ final class PreferencesWindowController {
     private var layoutsModel: LayoutsPreferencesModel?
     private var appsModel: AppsPreferencesModel?
     private var reflowsModel: ReflowsPreferencesModel?
+    private var magnetsModel: MagnetsPreferencesModel?
     private let coordinator: PersistenceCoordinator
 
     init(coordinator: PersistenceCoordinator) {
@@ -22,6 +23,7 @@ final class PreferencesWindowController {
             layoutsModel?.reload()
             appsModel?.reload()
             reflowsModel?.reload()
+            magnetsModel?.reload()
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             return
@@ -29,13 +31,16 @@ final class PreferencesWindowController {
         let layoutsModel = LayoutsPreferencesModel(coordinator: coordinator)
         let appsModel = AppsPreferencesModel(coordinator: coordinator)
         let reflowsModel = ReflowsPreferencesModel(coordinator: coordinator)
+        let magnetsModel = MagnetsPreferencesModel(coordinator: coordinator)
         self.layoutsModel = layoutsModel
         self.appsModel = appsModel
         self.reflowsModel = reflowsModel
+        self.magnetsModel = magnetsModel
         let hosting = NSHostingController(
             rootView: PreferencesRootView(layoutsModel: layoutsModel,
                                           appsModel: appsModel,
-                                          reflowsModel: reflowsModel))
+                                          reflowsModel: reflowsModel,
+                                          magnetsModel: magnetsModel))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Ferrite Preferences"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
@@ -47,11 +52,13 @@ final class PreferencesWindowController {
     }
 }
 
-/// Layouts, Apps and Reflows share one window, macOS System Settings style.
+/// Layouts, Apps, Reflows and Magnets share one window, macOS System Settings
+/// style.
 private struct PreferencesRootView: View {
     @ObservedObject var layoutsModel: LayoutsPreferencesModel
     @ObservedObject var appsModel: AppsPreferencesModel
     @ObservedObject var reflowsModel: ReflowsPreferencesModel
+    @ObservedObject var magnetsModel: MagnetsPreferencesModel
 
     var body: some View {
         TabView {
@@ -61,6 +68,8 @@ private struct PreferencesRootView: View {
                 .tabItem { Text("Apps") }
             ReflowsPreferencesView(model: reflowsModel)
                 .tabItem { Text("Reflows") }
+            MagnetsPreferencesView(model: magnetsModel)
+                .tabItem { Text("Magnets") }
         }
         .padding(12)
         .frame(minWidth: 620, minHeight: 420)
