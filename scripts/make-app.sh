@@ -56,11 +56,40 @@ SIGN_FLAGS=(--force)
 if [ "$HARDENED" = "1" ]; then
   SIGN_FLAGS+=(--options runtime --timestamp)
 fi
+
+# codesign blocks indefinitely when the keychain puts up an authorization
+# prompt for the signing key's private key, and the prompt is easy to miss
+# behind other windows — an unattended install once sat on it for 15 minutes.
+# Fail loudly after a generous deadline instead, and say what to click.
+sign() {
+  codesign "$@" &
+  local pid=$!
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$waited" -ge 45 ]; then
+      kill "$pid" 2>/dev/null || true
+      cat >&2 <<'STUCK'
+error: codesign did not finish within 45s.
+
+Almost always a keychain authorization dialog waiting off-screen: macOS is
+asking whether codesign may use the signing key's private key. Answer it with
+"Always Allow" (plain "Allow" re-prompts on every build), then re-run.
+
+Check with:  pgrep -fl SecurityAgent
+STUCK
+      exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$pid"
+}
+
 if [ -n "$IDENTITY" ]; then
-  codesign "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP"
+  sign "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP"
 elif security find-identity -v -p codesigning 2>/dev/null | grep -q "Ferrite Dev"; then
-  codesign "${SIGN_FLAGS[@]}" --sign "Ferrite Dev" "$APP"
+  sign "${SIGN_FLAGS[@]}" --sign "Ferrite Dev" "$APP"
 else
-  codesign "${SIGN_FLAGS[@]}" --sign - "$APP"
+  sign "${SIGN_FLAGS[@]}" --sign - "$APP"
 fi
 echo "Built $APP (version $VERSION)"
