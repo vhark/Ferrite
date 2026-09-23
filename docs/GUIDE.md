@@ -131,8 +131,8 @@ Rows of glyph buttons at the top of the menu. Each button's icon is a miniature 
 
 | Preset | Behavior |
 |---|---|
-| **Columns** | Even vertical strips, one per window. |
-| **Rows** | Even horizontal strips. |
+| **Columns** | Even vertical strips, one per window. Repeat on the display row to reverse left-to-right order. |
+| **Rows** | Even horizontal strips. Repeat on the display row to reverse top-to-bottom order. |
 | **Grid** | Near-square even grid; the cell count follows the window count. |
 | **Symmetric — equal areas** | The treemap's equal-weights case: every window the same area, arranged compactly. |
 | **Main + side** | One large main window taking 60% of the width on the **left**, the rest stacked in a side column on the right. The heaviest window is the main one. |
@@ -142,6 +142,8 @@ Rows of glyph buttons at the top of the menu. Each button's icon is a miniature 
 | **Treemap — heaviest in the centre / left / right** | Weight-proportional areas; the heaviest window takes the biased position, the rest fill around it. The signature layout: rank with *Grow frontmost*, or just focus what matters and let z-order rank for you. |
 | **Cascade** | Every window at 70% of the area's width and height, staggered diagonally from the top-left, the frontmost deepest and on top. The step shrinks as the window count grows so the last one still fits. |
 | **Monocle — all full size** | Every window at full size, one on top of another, in the stacking order they already had. |
+
+**Click again to reverse Columns or Rows.** On *Reflow this display*, the first click uses the current stacking order, the second reverses that placement order, and the third restores it. Changing focus between clicks does not scramble the cycle. Each display remembers its own order until Ferrite restarts. Choosing another display preset, changing the participating windows or kept-group membership, or changing the Keep-groups policy starts a fresh cycle on the next reflow. With **Keep magnet groups together** enabled, whole group tiles trade places; their internal formations are not mirrored. Custom presets, other built-ins, and group-only reflows retain their existing behavior, with no repeat-click variation.
 
 **Cascade and Monocle overlap on purpose.** Every other preset carves the area into tiles that don't overlap. These two stack windows instead — Cascade offsets each window from the one behind it so the pile stays clickable, Monocle gives every window the whole area so you work on one at a time without losing the others. Nothing is hidden or minimized; it's a stack of real windows in their existing order.
 
@@ -209,7 +211,7 @@ Gesture debugging: launch the binary with `FERRITE_TRACE_DRAG=1` in the environm
 
 Requirements: macOS 13+, Swift 5.9+ toolchain (Xcode or CLT).
 
-- `swift test` — 266 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
+- `swift test` — 273 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
 - `./scripts/make-app.sh` — builds and signs `build/Ferrite.app` (dev builds).
 - `./scripts/install.sh` — builds, installs to `/Applications`, registers Launch at Login. Also migrates state from a previous MacTLM install (one-shot, copy-never-delete) and retires the old app.
 - `./scripts/release.sh <version>` — cuts a public release: universal binary, Developer ID signing with hardened runtime, notarization, stapling, and the Homebrew cask bump. Operator runbook: [`docs/RELEASING.md`](RELEASING.md).

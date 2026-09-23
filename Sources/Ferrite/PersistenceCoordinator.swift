@@ -20,6 +20,7 @@ final class PersistenceCoordinator {
     let layoutLibraryStore: LayoutLibraryStore
     private let reflowStore: ReflowStore
     private let magnetStore: MagnetSettingsStore
+    private var displayReflowOrder = DisplayReflowOrder()
     /// Held in memory, not re-read per gesture: `updateCandidate` runs on every
     /// AX moved event during a drag, and the drag path must never touch disk
     /// (same intent as ExcludeListBox).
@@ -223,7 +224,8 @@ final class PersistenceCoordinator {
                                         excludedBundleIDs: currentExcludedBundleIDs,
                                         coordinator: self)
         let keep = reflowStore.load().keepGroupsOnDisplayReflow
-        let outcome = reflow.applyToDisplay(preset, keepGroups: keep)
+        let outcome = reflow.applyToDisplay(preset, keepGroups: keep,
+                                            order: &displayReflowOrder)
         let dissolved = keep ? 0 : dissolveGroups(scatteredAmong: outcome.writtenWindowIDs)
         NSLog("Ferrite: display reflow %@ moved %d windows (%@ groups, %d dissolved)",
               String(describing: preset), outcome.written,

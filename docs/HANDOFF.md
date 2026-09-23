@@ -1,6 +1,6 @@
-# Ferrite — Session Handoff (2026-09-11)
+# Ferrite — Session Handoff (2026-09-23)
 
-State: `main` includes M4 release infrastructure, the public website at https://vhark.github.io/Ferrite/, M6 reflow presets v2 and Standard resize mode, the live-verified resize-propagation gate (finding 27), configurable mate reach (32 pt default, live-confirmed 2026-09-05), and the signing timeout (finding 28). **266 unit tests, 0 failures**, verified 2026-09-11. M6 live acceptance is in progress: Step 1 passed; resume at Step 2. No `v0.12.0-m6` tag until the remaining protocol passes.
+State: `main` includes M4 release infrastructure, the public website at https://vhark.github.io/Ferrite/, M6 reflow presets v2 and Standard resize mode, the live-verified resize-propagation gate (finding 27), configurable mate reach (32 pt default, live-confirmed 2026-09-05), the signing timeout (finding 28), and repeat-click direction toggling for Columns/Rows display reflows. **273 unit tests, 0 failures**, verified 2026-09-23. The direction toggle also passed a standalone solver smoke run; native menu acceptance remains. M6 live acceptance is in progress: Step 1 passed; resume at Step 2. No `v0.12.0-m6` tag until the remaining protocol passes.
 
 ## What Ferrite is
 
@@ -26,6 +26,7 @@ Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (
 - **Late-arrival restacking** (`06a98d1`): a cold bundle launch where a slow app (Illustrator) takes >15s to draw.
 - **A→B group membership move**: first time two magnet clusters exist and a member is dragged from one onto the other.
 - **M6 reflow presets v2 + `.standard` resize mode**: Step 1 passed (display/group menu sections, wrapped glyphs, Keep toggle). Resume the plan's live protocol at Step 2: five new built-ins; then custom Grid and Main centre, explode/keep policies, explicit group and submenu targeting with Grow reapply, and Standard vs Shrink/Nudge. Only after those pass should M6 enter the shipped table and receive its tag.
+- **Columns/Rows repeat direction**: on the display row, click three times → original/reversed/original placement. Change focus between clicks; it must not change that sequence. With Keep enabled, groups swap as whole tiles without reflecting their internal formation. Repeat history is per display and in memory only. Other presets, custom presets, and group-only actions remain unchanged.
 
 ## Open backlog (all optional)
 

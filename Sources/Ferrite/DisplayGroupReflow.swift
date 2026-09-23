@@ -57,6 +57,7 @@ struct DisplayGroupReflow {
     /// tile and carries its formation into the assigned cell.
     func applyToDisplay(_ preset: GroupLayoutSolver.Preset,
                         keepGroups: Bool,
+                        order: inout DisplayReflowOrder,
                         gap: CGFloat = 8,
                         minimumSize: CGSize = CGSize(width: 240, height: 160))
     -> DisplayOutcome {
@@ -65,11 +66,13 @@ struct DisplayGroupReflow {
         }
         let members = eligibleWindows(on: display)
         guard members.count > 1 else {
+            order.reset(displayID: display.info.id)
             return DisplayOutcome(written: 0, writtenWindowIDs: [])
         }
         guard keepGroups else {
             return placeIndividually(members, preset: preset,
                                      in: display.visibleArea,
+                                     displayID: display.info.id, order: &order,
                                      gap: gap, minimumSize: minimumSize)
         }
 
@@ -94,6 +97,7 @@ struct DisplayGroupReflow {
         var tiles: [GroupLayoutSolver.Tile] = []
         var groupTiles: [Int: UUID] = [:]
         var soloTiles: [Int: DriverWindow] = [:]
+        var membersByTile: [Int: Set<Int>] = [:]
         var dealt = Set<UUID>()
         for (index, member) in members.enumerated() {
             let tile = GroupLayoutSolver.Tile(id: member.window.id,
@@ -101,12 +105,16 @@ struct DisplayGroupReflow {
             if let groupID = groupOfWindow[member.window.id] {
                 guard dealt.insert(groupID).inserted else { continue }
                 groupTiles[member.window.id] = groupID
+                membersByTile[member.window.id] = Set(
+                    membersOfGroup[groupID, default: []].map(\.window.id))
             } else {
                 soloTiles[member.window.id] = member.window
             }
             tiles.append(tile)
         }
-        let solved = GroupLayoutSolver.solve(tiles: tiles, preset: preset,
+        let ordered = order.orderedTiles(tiles, preset: preset, displayID: display.info.id,
+                                         keepGroups: true, membersByTile: membersByTile)
+        let solved = GroupLayoutSolver.solve(tiles: ordered, preset: preset,
                                              in: display.visibleArea, gap: gap,
                                              minimumSize: minimumSize)
         var written = Set<Int>()
@@ -142,6 +150,8 @@ struct DisplayGroupReflow {
     private func placeIndividually(_ members: [Member],
                                    preset: GroupLayoutSolver.Preset,
                                    in area: CGRect,
+                                   displayID: String,
+                                   order: inout DisplayReflowOrder,
                                    gap: CGFloat,
                                    minimumSize: CGSize) -> DisplayOutcome {
         // Frontmost (lowest z index) is heaviest.
@@ -149,7 +159,9 @@ struct DisplayGroupReflow {
             GroupLayoutSolver.Tile(id: member.window.id,
                                    weight: Double(members.count - index))
         }
-        let solved = GroupLayoutSolver.solve(tiles: tiles, preset: preset,
+        let ordered = order.orderedTiles(tiles, preset: preset, displayID: displayID,
+                                         keepGroups: false)
+        let solved = GroupLayoutSolver.solve(tiles: ordered, preset: preset,
                                             in: area, gap: gap,
                                             minimumSize: minimumSize)
         var written = Set<Int>()
