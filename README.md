@@ -2,9 +2,15 @@
 
 [Website & visual tour](https://vhark.github.io/Ferrite/) · [User guide](docs/GUIDE.md) · [Roadmap & release status](docs/BACKLOG.md)
 
-A window layout manager for macOS (Linux planned). Ferrite remembers where your windows live, restores whole workspaces with one hotkey, and lets windows snap together into **magnet groups** that move, resize, and reflow as one.
+## Break free of the grid.
 
-Ferrite is *not* a classic auto-tiler: windows stay free-floating and may overlap. Structure is something you opt into, one edge at a time.
+Ferrite is a window layout manager for macOS (Linux planned). Make room for the way you work: arrange windows freely, connect related apps into **magnet groups**, or tile a display with one click—on a laptop, an ultrawide, or a multi-monitor desk.
+
+Keep your manuscript beside your notes, your research alongside your references, or your editor next to terminals and documentation. Save a workspace for each kind of work and bring it back with one hotkey.
+
+**Free placement when you need flexibility. Tiling when you want structure.**
+
+Windows stay free-floating and may overlap. Reflow tiles them on demand; Ferrite doesn't continuously enforce a layout.
 
 ## Highlights
 

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ferrite, a window layout manager for macOS</title>
-<meta name="description" content="Ferrite remembers where your windows live, restores whole workspaces with one hotkey, and lets windows snap together into magnet groups that move, resize and reflow as one.">
-<meta property="og:title" content="Ferrite">
-<meta property="og:description" content="A window layout manager for macOS. Position persistence, workspace templates, and magnet groups.">
+<title>Ferrite — Break free of the grid</title>
+<meta name="description" content="Make room for writing, research, and coding. Arrange windows freely, group related apps, or tile on demand—on a laptop, ultrawide, or multi-monitor Mac.">
+<meta property="og:title" content="Ferrite — Break free of the grid">
+<meta property="og:description" content="Make room for writing, research, and coding. Arrange windows freely, group related apps, or tile on demand—on a laptop, ultrawide, or multi-monitor Mac.">
 <meta property="og:type" content="website">
 <link rel="canonical" href="https://vhark.github.io/Ferrite/">
 <!--
@@ -202,13 +202,14 @@
 <header>
   <div class="wrap hero">
     <div>
-      <h1>Your windows, where you left them.</h1>
-      <p class="lead">Ferrite is a window layout manager for macOS. It remembers where every app's windows live, restores whole workspaces with one hotkey, and lets windows snap together into magnet groups that move, resize and reflow as one.</p>
+      <p class="eyebrow">Window layout manager for macOS</p>
+      <h1>Break free of the grid.</h1>
+      <p class="lead">Make room for the way you work. Arrange windows freely, connect related apps into magnet groups, or tile a display with one click—on a laptop, an ultrawide, or a multi-monitor desk.</p>
       <div class="cta">
         <a class="btn primary" href="#install">Install</a>
         <a class="btn ghost" href="https://github.com/vhark/Ferrite/blob/main/docs/GUIDE.md">Read the guide</a>
       </div>
-      <p class="note">Not an auto-tiler. Windows stay free floating and may overlap. Structure is something you opt into, one edge at a time.</p>
+      <p class="note">Free placement when you need flexibility. Tiling when you want structure.</p>
     </div>
     <div class="stage">
       <div class="d"><svg viewBox="0 0 160 100" role="img" aria-label="Main in the centre layout"><rect class="t" x="129.50" y="51.50" width="29.00" height="47.00" rx="2"/><rect class="t" x="1.50" y="51.50" width="29.00" height="47.00" rx="2"/><rect class="t" x="129.50" y="1.50" width="29.00" height="47.00" rx="2"/><rect class="t" x="1.50" y="1.50" width="29.00" height="47.00" rx="2"/><rect class="t a" x="33.50" y="1.50" width="93.00" height="97.00" rx="2"/></svg></div>
@@ -219,7 +220,7 @@
 <section id="persistence">
   <div class="wrap split">
     <div class="txt">
-      <h2>Position persistence, with zero setup</h2>
+      <h2>Your windows, where you left them.</h2>
       <p class="lede">Every app's windows are remembered as you work. When an app relaunches, when you log in, or when you plug a display in, its windows go back where they belong. Nothing to configure.</p>
       <p style="margin-top:16px">Records are keyed by the set of displays attached, so your desk arrangement and your laptop-only arrangement are separate memories. Multi window apps get one remembered frame per window, matched by pin rules and window identity rather than guesswork.</p>
     </div>
@@ -230,7 +231,8 @@
 <section id="workspaces">
   <div class="wrap">
     <h2>Workspaces bring back the whole desk</h2>
-    <p class="lede">Snapshot an arrangement as a named workspace, per display. Restoring it adopts the apps already running and launches the ones that are not.</p>
+    <p class="lede">Keep your manuscript beside your notes, your research alongside your references, or your editor next to terminals and documentation. Save a workspace for each kind of work and bring it back with one hotkey.</p>
+    <p style="margin-top:16px">Snapshot an arrangement as a named workspace, per display. Restoring it adopts the apps already running and launches the ones that are not.</p>
     <div class="steps">
       <div class="step"><b>01</b><p>Arrange your windows the way you want them.</p></div>
       <div class="step"><b>02</b><p>Save the arrangement as a named layout.</p></div>
@@ -257,6 +259,7 @@
   <div class="wrap">
     <h2>Reflow a display, or just one group</h2>
     <p class="lede">One click arranges every window on the active display, or only the magnet group you are working in. Each diagram below is drawn by the same solver that moves your windows, so it shows exactly what you get. The accented tile is the frontmost window.</p>
+    <p style="margin-top:16px">Tile when it helps, then keep arranging freely. Ferrite does not continuously enforce a layout.</p>
     <div class="presets">
 <figure class="p"><div class="d"><svg viewBox="0 0 160 100" role="img" aria-label="Columns layout"><rect class="t" x="121.50" y="1.50" width="37.00" height="97.00" rx="2"/><rect class="t" x="81.50" y="1.50" width="37.00" height="97.00" rx="2"/><rect class="t" x="41.50" y="1.50" width="37.00" height="97.00" rx="2"/><rect class="t a" x="1.50" y="1.50" width="37.00" height="97.00" rx="2"/></svg></div><figcaption>Columns</figcaption></figure>
 <figure class="p"><div class="d"><svg viewBox="0 0 160 100" role="img" aria-label="Rows layout"><rect class="t" x="1.50" y="68.17" width="157.00" height="30.33" rx="2"/><rect class="t" x="1.50" y="34.83" width="157.00" height="30.33" rx="2"/><rect class="t a" x="1.50" y="1.50" width="157.00" height="30.33" rx="2"/></svg></div><figcaption>Rows</figcaption></figure>
