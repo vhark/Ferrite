@@ -638,6 +638,8 @@ final class MagnetDragSession {
         /// The group's mode at session start — the at-rest state the user was
         /// looking at when the gesture began.
         let resizeMode: MagnetGroup.ResizeMode
+        /// Captured once per gesture; Standard always overrides the opt-in.
+        let scaleGroupOnRelease: Bool
         let mouseUpMonitor: Any?
     }
     private var resize: Resize?
@@ -668,11 +670,13 @@ final class MagnetDragSession {
         // The driver's enumeration can trail the notification: the dragged
         // window's start frame is its pre-gesture frame.
         startFrames[event.windowID] = previous
-        let outer = MagnetScale.outerEdges(
+        let scaleGroupOnRelease = coordinator.magnetSettings.scaleGroupsOnResize
+            && resizeMode != .standard
+        let outer = scaleGroupOnRelease ? MagnetScale.outerEdges(
             of: previous,
             among: live.filter { $0.window.id != event.windowID }
                 .map { $0.window.frame },
-            gap: Self.gap)
+            gap: Self.gap) : []
         let mouseUp = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) {
             [weak self] _ in self?.finishResize()
         }
@@ -682,20 +686,21 @@ final class MagnetDragSession {
                         members: live,
                         outerEdges: outer,
                         resizeMode: resizeMode,
+                        scaleGroupOnRelease: scaleGroupOnRelease,
                         mouseUpMonitor: mouseUp)
         trace("resize session open win=\(event.windowID) outer=\(outer)")
     }
 
-    /// Mouse-up: the resize is over. Settle the group so it scales as one
-    /// window along the axes whose outer edges moved.
+    /// Mouse-up: optionally scale the group along the axes whose outer edges
+    /// moved. Shared-edge propagation is independent of this opt-in settle.
     private func finishResize() {
         guard let open = resize else {
             trace("mouse-up with no open resize session")
             return
         }
         endResize()
-        guard open.resizeMode != .standard else {
-            trace("resize settle win=\(open.windowID): standard mode, group untouched")
+        guard open.scaleGroupOnRelease else {
+            trace("resize settle win=\(open.windowID): proportional scaling disabled")
             return
         }
         var releaseFrames: [Int: CGRect] = [:]

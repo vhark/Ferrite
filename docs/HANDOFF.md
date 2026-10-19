@@ -1,10 +1,10 @@
-# Ferrite — Session Handoff (2026-09-23)
+# Ferrite — Session Handoff (2026-10-18)
 
-State: `main` includes M4 release infrastructure, the public website at https://vhark.github.io/Ferrite/, M6 reflow presets v2 and Standard resize mode, the live-verified resize-propagation gate (finding 27), configurable mate reach (32 pt default, live-confirmed 2026-09-05), the signing timeout (finding 28), and repeat-click direction toggling for Columns/Rows display reflows. **273 unit tests, 0 failures**, verified 2026-09-23. The user confirmed repeat-click reversal works live after the Columns three-click check; automated coverage also exercises Rows and kept-group ordering. M6 live acceptance is in progress: Step 1 passed; resume at Step 2. No `v0.12.0-m6` tag until the remaining protocol passes.
+State: `main` includes M4 release infrastructure, the public website at https://vhark.github.io/Ferrite/, M6 reflow presets v2 and Standard resize mode, the live-verified resize-propagation gate (finding 27), configurable mate reach (32 pt default, live-confirmed 2026-09-05), the signing timeout (finding 28), and repeat-click direction toggling for Columns/Rows display reflows. Proportional outer-edge/corner scaling is now opt-in in Preferences → Magnets, off for new and existing settings. **275 unit tests, 0 failures**, verified 2026-10-18. The user confirmed repeat-click reversal works live after the Columns three-click check; automated coverage also exercises Rows and kept-group ordering. M6 live acceptance is in progress: Step 1 passed; resume at Step 2. No `v0.12.0-m6` tag until the remaining protocol passes.
 
 ## What Ferrite is
 
-A macOS-first window layout manager (Linux next): automatic per-app position persistence, workspace templates with per-bundle hotkeys, and magnet groups — windows mated by dragging edges together, carried as a cluster with ⌘-drag, resized with shared-edge shrink/nudge, scaled proportionally from outer edges, and reflowed into weighted-treemap presets. Formerly **MacTLM**; renamed at this tag for the cross-platform future.
+A macOS-first window layout manager (Linux next): automatic per-app position persistence, workspace templates with per-bundle hotkeys, and magnet groups — windows mated by dragging edges together, carried as a cluster with ⌘-drag, resized with shared-edge shrink/nudge, optionally scaled proportionally from outer edges/corners, and reflowed into weighted-treemap presets. Formerly **MacTLM**.
 
 ## Where things stand
 
@@ -27,6 +27,7 @@ Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (
 - **A→B group membership move**: first time two magnet clusters exist and a member is dragged from one onto the other.
 - **M6 reflow presets v2 + `.standard` resize mode**: Step 1 passed (display/group menu sections, wrapped glyphs, Keep toggle). Resume the plan's live protocol at Step 2: five new built-ins; then custom Grid and Main centre, explode/keep policies, explicit group and submenu targeting with Grow reapply, and Standard vs Shrink/Nudge. Only after those pass should M6 enter the shipped table and receive its tag.
 - **Repeat-direction variants**: Columns reversal is live-confirmed. Rows and Keep-groups behavior have automated coverage but no separately recorded native check. With Keep enabled, groups should swap as whole tiles without reflecting their internal formation.
+- **Opt-in proportional scaling**: confirm an existing group's outer-edge/corner resize affects only the grabbed window with the new Magnets switch off; enable it and confirm proportional settle returns in Shrink/Nudge but not Standard. Shared-edge behavior is unchanged.
 
 ## Open backlog (all optional)
 

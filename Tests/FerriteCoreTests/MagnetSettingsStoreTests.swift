@@ -64,4 +64,32 @@ final class MagnetSettingsStoreTests: XCTestCase {
         written.mateReach = 9999
         XCTAssertEqual(written.mateReach, MagnetSettings.maximumMateReach)
     }
+
+    func testLegacySettingsDisableScalingWithoutLosingCustomReach() throws {
+        try #"{"mateReach": 76}"#.data(using: .utf8)!.write(to: url)
+        let store = MagnetSettingsStore(url: url)
+        let settings = store.load()
+        XCTAssertEqual(settings.mateReach, 76)
+        try store.save(settings)
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(contentsOf: url)) as? [String: Any])
+        XCTAssertEqual(saved["scaleGroupsOnResize"] as? Bool, false)
+    }
+
+    func testExplicitScalingChoiceSurvivesReachEditsAndReload() throws {
+        for enabled in [true, false] {
+            try """
+            {"mateReach": 48, "scaleGroupsOnResize": \(enabled)}
+            """.data(using: .utf8)!.write(to: url)
+            let store = MagnetSettingsStore(url: url)
+            var settings = store.load()
+            settings.mateReach = 64
+            try store.save(settings)
+            let reloaded = store.load()
+            XCTAssertEqual(reloaded.mateReach, 64)
+            let saved = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(reloaded)) as? [String: Any])
+            XCTAssertEqual(saved["scaleGroupsOnResize"] as? Bool, enabled)
+        }
+    }
 }

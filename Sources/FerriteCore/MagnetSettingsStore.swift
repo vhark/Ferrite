@@ -21,6 +21,10 @@ public struct MagnetSettings: Codable, Equatable {
         set { reach = Self.clampedMateReach(newValue) }
     }
 
+    /// Opt-in proportional scaling when an outer edge/corner is resized.
+    /// Shared-edge Shrink/Nudge and explicit reflows are independent.
+    public var scaleGroupsOnResize = false
+
     private var reach: CGFloat
 
     public init(mateReach: CGFloat = MagnetMating.defaultThreshold) {
@@ -33,6 +37,7 @@ public struct MagnetSettings: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case mateReach
+        case scaleGroupsOnResize
     }
 
     /// Absent-tolerant: a missing field decodes to the built-in default, so a
@@ -42,6 +47,8 @@ public struct MagnetSettings: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let stored = try container.decodeIfPresent(CGFloat.self, forKey: .mateReach)
         reach = Self.clampedMateReach(stored ?? MagnetMating.defaultThreshold)
+        scaleGroupsOnResize = try container.decodeIfPresent(
+            Bool.self, forKey: .scaleGroupsOnResize) ?? false
     }
 
     /// Hand-written because the stored property is private behind the clamping
@@ -49,6 +56,7 @@ public struct MagnetSettings: Codable, Equatable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(reach, forKey: .mateReach)
+        try container.encode(scaleGroupsOnResize, forKey: .scaleGroupsOnResize)
     }
 }
 

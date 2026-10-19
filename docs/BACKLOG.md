@@ -24,7 +24,7 @@ Living notes. Specs live in `docs/superpowers/specs/`, plans in `docs/superpower
 
 **PRD §9 acceptance: PASSED** live on 2026-08-19 — `Design&Comms` restored from a cold start (Illustrator, both Arcs, Paseo, Nextcloud Talk, Finder, Spotify, Obsidian, Rambox), apps relaunching into place one by one. The single defect it exposed (Illustrator covering the layout) is fixed in `v0.2.1-m2a` and re-verified.
 
-Test suite: 273 unit tests over `FerriteCore` (pure, Linux-portable), passing on 2026-09-23. AppKit and SwiftUI layers are verified by live protocol, not unit tests.
+Test suite: 275 unit tests over `FerriteCore` (pure, Linux-portable), passing on 2026-10-18. AppKit and SwiftUI layers are verified by live protocol, not unit tests.
 
 **Multi-display validated 2026-08-20** — a second display (laptop built-in alongside the ultrawide) made the bundle path testable for the first time. `--apply-bundle` placed both laptop windows pixel-exact, confirming `MultiApplyPlanner` and the per-display `visibleArea` plumbing correct.
 
@@ -51,6 +51,7 @@ Test suite: 273 unit tests over `FerriteCore` (pure, Linux-portable), passing on
 - **Late-arrival restacking (Fix C, `06a98d1`).** When the 15s launch deadline fires before a slow app draws a window, `inFlight` is now retained (`reportedMissing`) so the app rejoins the z-order when it finally settles, with a 120s hard stop. Only reachable on a cold launch of a slow app; not yet observed live. The next full quit-and-relaunch of `Design&Comms` exercises it.
 - **A→B membership move.** Dragging a member of group A onto a window of group B should leave A and join B (un-mate runs before mate on release). Implemented and unit-adjacent (ordering is explicit in `finishDrag`), but never exercised live with two simultaneous groups. First session with two clusters verifies it.
 - **M6 reflow presets v2 + `.standard` resize mode.** Implemented and unit-covered. Live walkthrough in progress: Step 1 passed — display/group sections appear correctly, including wrapped glyphs and the Keep toggle. Resume at Step 2, the five new display built-ins. Custom Grid and Main centre, explode vs keep, group/submenu targeting, and Standard vs Shrink/Nudge still need acceptance. Blocks the M6 tag and its shipped-table row.
+- **Proportional scaling now opt-in (2026-10-18).** The user found whole-group scaling on corner drags to be a bad default. Preferences → Magnets now has **Scale groups when resizing outer edges or corners**, default off even for existing groups/settings. Shared-edge Shrink/Nudge, carry, and explicit reflows are unchanged; Standard always suppresses scaling. Migration/persistence regressions and a settings smoke run pass. The installed native switch was visually checked, toggled on/off, and verified against `magnets.json`; it is left off with the user's 32 pt reach preserved. Live outer-edge/corner gestures with the option off/on still need confirmation.
 
 ## Platform findings (paid for in blood, do not regress)
 

@@ -2,9 +2,8 @@ import AppKit
 import SwiftUI
 import FerriteCore
 
-/// The one tunable in the magnet gesture: how far a window's edge reaches for
-/// another's. The overlap gate is not exposed — it is what keeps mating from
-/// being accidental, and loosening it would make the gesture untrustworthy.
+/// Magnet gesture settings. The overlap gate remains fixed so loosening the
+/// mate reach cannot turn corner grazes into accidental mates.
 struct MagnetsPreferencesView: View {
     @ObservedObject var model: MagnetsPreferencesModel
 
@@ -34,10 +33,18 @@ struct MagnetsPreferencesView: View {
                  + "the shorter side — not by this distance.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("Perpendicular alignment stays at a fixed 24 pt: below a "
-                 + "24 pt reach, every mate also levels the perpendicular "
-                 + "edges, because nothing can be near enough to mate yet too "
-                 + "far to straighten.")
+            Text("Perpendicular alignment uses its own 24 pt threshold, "
+                 + "independent of mate reach.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Divider()
+            Toggle("Scale groups when resizing outer edges or corners",
+                   isOn: Binding(get: { model.scaleGroupsOnResize },
+                                 set: { model.setScaleGroupsOnResize($0) }))
+            Text("Off by default. When enabled, resizing an outer edge or "
+                 + "corner scales the whole group on release. Shared-edge "
+                 + "Shrink/Nudge still works when this is off. Standard mode "
+                 + "never scales the group.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -49,6 +56,7 @@ struct MagnetsPreferencesView: View {
 /// Bridges the coordinator's MagnetSettingsStore to SwiftUI.
 final class MagnetsPreferencesModel: ObservableObject {
     @Published var mateReach = MagnetMating.defaultThreshold
+    @Published var scaleGroupsOnResize = false
     private let coordinator: PersistenceCoordinator
 
     init(coordinator: PersistenceCoordinator) {
@@ -62,6 +70,7 @@ final class MagnetsPreferencesModel: ObservableObject {
 
     func reload() {
         mateReach = coordinator.magnetSettings.mateReach
+        scaleGroupsOnResize = coordinator.magnetSettings.scaleGroupsOnResize
     }
 
     // Writes through the coordinator, whose hook fires reload — so this never
@@ -69,5 +78,9 @@ final class MagnetsPreferencesModel: ObservableObject {
     // reach the gesture would refuse.
     func setMateReach(_ points: CGFloat) {
         coordinator.updateMagnetSettings { $0.mateReach = points }
+    }
+
+    func setScaleGroupsOnResize(_ enabled: Bool) {
+        coordinator.updateMagnetSettings { $0.scaleGroupsOnResize = enabled }
     }
 }
