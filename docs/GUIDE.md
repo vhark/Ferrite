@@ -23,9 +23,9 @@ Ferrite has three ideas, layered so each works alone:
 
 1. **Persistence** — Ferrite continuously remembers where each app's windows are. When an app relaunches, its windows go back where they belong. Automatic, always on (unless paused), no configuration.
 2. **Workspaces** — a named snapshot of an entire arrangement: which apps, which windows, where, in what stacking order, per display. Restoring one is a single action that adopts running apps and launches missing ones.
-3. **Magnet groups** — windows you've stuck together by dragging their edges flush. A group behaves like one combined window: carry it, scale it, resize along shared edges, reflow it into presets.
+3. **Magnet groups** — windows joined by dragging their edges flush, or gathered automatically by application when you opt in. A group behaves like one combined window: carry it, scale it, resize along shared edges, reflow it into presets.
 
-Ferrite is **not an auto-tiler**. Nothing moves unless an app relaunches into its remembered spot, you invoke a workspace, or you use a magnet gesture. Overlapping, freeform layouts are first-class.
+Ferrite does **not continuously enforce a tiled layout**. Overlapping, freeform layouts are first-class. Position restoration, workspaces, reflows, and magnet gestures move windows when invoked; optional automatic application clustering also gathers windows when enabled, after startup restoration, and as new windows appear.
 
 A fourth, invisible idea underlies the other three: **window identity**. Ferrite recognizes "the same window" across relaunches by a salted hash of its title, by your pin rules, and — only when counts make it safe — by window order. Titles themselves never touch disk (see [Privacy](#privacy)).
 
@@ -97,7 +97,7 @@ Windows that were minimized or hidden at save time are not part of the snapshot.
 
 ## Magnet groups
 
-The gesture vocabulary. All gestures use plain window dragging — no modes, no commands, with one modifier (⌘) for carrying.
+The gesture vocabulary below describes ordinary magnet behavior. All gestures use plain window dragging, with one modifier (⌘) for carrying. Application Clustering Mode restricts mating to windows of the same application.
 
 | Gesture | Result |
 |---|---|
@@ -110,6 +110,16 @@ The gesture vocabulary. All gestures use plain window dragging — no modes, no 
 | **Drag an outer corner** (two unshared edges) | Only the grabbed window changes by default. The same opt-in scales the group along both axes on release. A mixed shared/outer corner still applies Shrink/Nudge on its shared axis; its outer axis scales the group only when enabled. |
 
 **Mate reach.** How near the two facing edges must come before the blue preview appears is yours to set, in **Preferences → Magnets** (8–128 pt, stored in `magnets.json`). The default is **32 pt**, confirmed by hand. A smaller reach asks for more precise aim; a larger one offers the mate from further out. The quarter-overlap requirement rejects corner grazes. Perpendicular alignment uses a separate 24 pt threshold: reducing reach does not force offset edges to line up. Changing the setting takes effect on your next drag; no restart.
+
+**Application Clustering Mode (Alpha).** Enable **Preferences → Magnets → Application Clustering Mode (Alpha)** to replace existing magnet groups with same-application clusters, separately on each display. Windows gather around that application's frontmost eligible window. The mode is off by default, including for older settings files. New windows attach to an available outer edge with the normal **8 pt gap**, preserving existing positions and sizes when they fit. Only when no edge fits does Ferrite repack the cluster; it minimizes shrinking and never enlarges smaller windows merely to fill cells.
+
+While this mode is on, windows do not preview, snap, or mate to other applications. Excluded applications, Ferrite itself, dialogs, hidden/minimized windows, and full-screen windows are skipped. If the windows cannot fit within usable screen space and their minimum sizes, the newcomer stays ungrouped. Ferrite checks achieved AX frames before committing membership and attempts to restore the original frames if an app refuses the placement.
+
+Manual drag-away, Ungroup, and other membership-removing actions keep those live windows out of automatic gathering for the current Ferrite session. Reopening a window or switching the mode off and on makes it eligible again. Turning the mode off stops automatic gathering without moving windows or dissolving the current groups, and restores ordinary cross-application magnet behavior. Replaced groups are not restored. The setting and formed groups survive restarts; live-window opt-outs do not. Application clusters use the normal ⌘-drag, resize modes, weights, and group reflow controls.
+
+Choosing a saved workspace or an individual display layout, including through a workspace hotkey or `--apply-bundle`, turns the mode off before placement. A display reflow also turns it off; reflowing an individual application cluster does not. Saved layouts are never modified by the mode. CLI layout application waits for the running app to stop clustering; if the app does not acknowledge within five seconds, the command fails without applying the layout.
+
+Pause Persistence also pauses automatic gathering. Resuming gathers eligible windows again, including windows opened while paused, without overriding manual detachments.
 
 **Standard mode.** In **Standard** neither the live propagation nor the proportional settle runs, so a shared edge, an outer edge and a corner all resize just the one window you grabbed. The group is still a group: ⌘-drag carries the cluster, and reflowing the group treats it as one, weights and all. Note that pulling a window well clear of its mates this way leaves it no longer touching them, so the next time you drag it and release it away from them, it leaves the group — dragging it back into contact keeps it (adjacency is live geometry, read at the release position, not a remembered fact).
 
@@ -176,7 +186,7 @@ Reflow moves *eligible* windows only: standard, non-minimized windows of visible
 - **Keep magnet groups together when reflowing a display** — the same setting as the menu checkmark under the display glyphs; either one moves both. Off by default (explode); see [Reflow presets](#reflow-presets) for what each policy does.
 - **Custom presets** — **Add** appends a preset, the name field renames it inline, the trash button deletes it, and the kind picker chooses Columns / Grid / Main centre (switching kind loads that kind's defaults). Steppers set the parameters: column count, grid columns and rows, centre percentage, per-side cap. The glyph beside each row is a live preview rendered by the solver itself, so it updates as you step and always shows the layout you'll actually get. Presets are stored in `reflows.json`, and the menu picks them up the next time you open it — no restart.
 
-**Magnets tab.** **Mate reach** — one slider, 8–128 pt in 4 pt steps, showing the current value in points; 32 pt by default. It sets how near facing edges must come before a mate is offered. The quarter-overlap gate and perpendicular alignment threshold are separate checks. **Scale groups when resizing outer edges or corners** — off by default; enables proportional group scaling on release in Shrink/Nudge modes. Both settings are stored in `magnets.json` and take effect on the next gesture — no restart. See [Magnet groups](#magnet-groups).
+**Magnets tab.** **Mate reach** — one slider, 8–128 pt in 4 pt steps, showing the current value in points; 32 pt by default. It sets how near facing edges must come before a mate is offered. The quarter-overlap gate and perpendicular alignment threshold are separate checks. **Scale groups when resizing outer edges or corners** — off by default; enables proportional group scaling on release in Shrink/Nudge modes. **Automatically cluster windows of the same application** — off by default; gathers existing windows and attaches newcomers, per display. All three settings are stored in `magnets.json`; gesture settings apply on the next gesture, while enabling automatic clustering gathers existing windows without a restart. See [Magnet groups](#magnet-groups).
 
 ---
 
@@ -189,7 +199,7 @@ Ferrite's data files are designed to be synced (git, Nextcloud) without leaking 
 - **Pins are yours, not captured**: they're patterns you typed, matched against live titles in memory.
 - Losing the salt (e.g. wiping defaults) doesn't lose data, but every stored hash goes stale — matching degrades to pins and order until windows are re-captured.
 
-Data lives in `~/Library/Application Support/Ferrite/`: `layouts.json` (workspaces), `configurations/*.json` (per-display-set records and magnet groups), `exclude.json` (only written once you customize the list), `reflows.json` (custom reflow presets and the group policy), `magnets.json` (the mate reach). None of them contains a window title.
+Data lives in `~/Library/Application Support/Ferrite/`: `layouts.json` (workspaces), `configurations/*.json` (per-display-set records and magnet groups), `exclude.json` (only written once you customize the list), `reflows.json` (custom reflow presets and the group policy), `magnets.json` (mate reach, proportional scaling, and automatic application clustering). None of them contains a window title. Live window-to-slot bindings remain in memory only.
 
 ---
 
@@ -213,7 +223,7 @@ Gesture debugging: launch the binary with `FERRITE_TRACE_DRAG=1` in the environm
 
 Requirements: macOS 13+, Swift 5.9+ toolchain (Xcode or CLT).
 
-- `swift test` — 275 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
+- `swift test` — 296 unit tests over `FerriteCore` (pure Foundation, Linux-portable; the AppKit layer is verified by live protocol, not unit tests).
 - `./scripts/make-app.sh` — builds and signs `build/Ferrite.app` (dev builds).
 - `./scripts/install.sh` — builds, installs to `/Applications`, registers Launch at Login. Also migrates state from a previous MacTLM install (one-shot, copy-never-delete) and retires the old app.
 - `./scripts/release.sh <version>` — cuts a public release: universal binary, Developer ID signing with hardened runtime, notarization, stapling, and the Homebrew cask bump. Operator runbook: [`docs/RELEASING.md`](RELEASING.md).

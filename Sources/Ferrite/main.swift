@@ -85,6 +85,7 @@ if let flagIndex = arguments.firstIndex(of: "--apply-bundle") {
             print("  \(layout.displayName) [\(layout.displayID.prefix(8))] "
                   + "\(layout.entries.count) entries")
         }
+        try coordinator.waitForApplicationClusteringToStop()
         coordinator.applyBundle(named: name)
         // Let placement, settles and the activation cascade finish.
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 20))

@@ -1,6 +1,8 @@
-# Ferrite — Session Handoff (2026-10-18)
+# Ferrite — Session Handoff (2026-10-27)
 
 State: `main` includes M4 release infrastructure, the public website at https://vhark.github.io/Ferrite/, M6 reflow presets v2 and Standard resize mode, the live-verified resize-propagation gate (finding 27), configurable mate reach (32 pt default, live-confirmed 2026-09-05), the signing timeout (finding 28), and repeat-click direction toggling for Columns/Rows display reflows. Proportional outer-edge/corner scaling is now opt-in in Preferences → Magnets, off for new and existing settings. **275 unit tests, 0 failures**, verified 2026-10-18. The user confirmed repeat-click reversal works live after the Columns three-click check; automated coverage also exercises Rows and kept-group ordering. M6 live acceptance is in progress: Step 1 passed; resume at Step 2. No `v0.12.0-m6` tag until the remaining protocol passes.
+
+Working branch `feat/automatic-app-clusters` adds **Application Clustering Mode (Alpha)** in Preferences → Magnets. Enabling replaces existing groups with same-app clusters per display and prevents cross-app previews/snapping/mating. Newcomers append without moving existing members when possible, with connected shrink-only packing as fallback. Disabling preserves current frames/groups and restores ordinary magnets; replaced groups do not return. Saved workspace, individual-layout, hotkey, CLI, and display-reflow paths exit the mode before placement. CLI waits for the live GUI's acknowledgment and fails without placement on timeout. Capture, restore, and group lookup share live bindings for titleless/duplicate-title windows. **296 unit tests pass.** Native checks with isolated settings cover gathering/additions, detachments, overflow, startup/pause/resume, mixed-group replacement, drag isolation, exact toggle-off frame preservation, ordinary magnet recovery, workspace/individual-layout/reflow exit, and CLI acknowledgment/timeout. The Alpha switch was visually checked. Only one physical display was available.
 
 ## What Ferrite is
 
@@ -10,14 +12,14 @@ A macOS-first window layout manager (Linux next): automatic per-app position per
 
 Full shipped table with per-milestone live-acceptance notes: `docs/BACKLOG.md` (`v0.1.0-m1` through `v0.11.0-ferrite` — every tag was cut only after passing its live protocol on the user's machine). The 28-item platform findings list there is **authoritative** — read it before touching AX, TCC, signing, caches, event handling, or persistence.
 
-- Daemon: `/Applications/Ferrite.app` (`dev.ferrite.Ferrite`), running, Launch-at-Login enabled, Accessibility granted (stale MacTLM entry removed by hand).
+- Current trial: the updated `build/Ferrite.app` is running with Application Clustering Mode enabled. `/Applications/Ferrite.app` is unchanged; the installed app remains the Launch-at-Login target. Accessibility is granted.
 - Signing: `Ferrite Dev` self-signed identity (openssl + `security import` + `add-trusted-cert -p codeSign`; keychain ACL "Always Allow" clicked — codesign is silent). Never ad-hoc sign: it re-keys TCC per build (finding 6).
 - Dev loop: `scripts/make-app.sh` → `build/Ferrite.app`; `scripts/install.sh` → `/Applications` + login item; `scripts/release.sh <x.y.z>` → notarized public release (runbook: `docs/RELEASING.md`). `install.sh` still carries the one-time MacTLM transition block — harmless now, removable later.
 - Gesture tracing: `FERRITE_TRACE_DRAG=1` (findings 22–27 were all diagnosed with it). Diagnostics: `--list-windows`, `--list-displays`, `--probe-frame <bundleID>`, `--login-status`, `--apply-bundle`.
 
 ## User data
 
-- `~/Library/Application Support/Ferrite/` — layouts.json, per-configuration records + magnet groups, exclude.json, reflows.json (custom reflow presets + display-reflow group policy), magnets.json (mate reach, written when customized). Sync-friendly; window titles are salted hashes, never plaintext.
+- `~/Library/Application Support/Ferrite/` — layouts.json, per-configuration records + magnet groups, exclude.json, reflows.json (custom reflow presets + display-reflow group policy), magnets.json (mate reach, proportional scaling, automatic application clustering). Sync-friendly; window titles are salted hashes, never plaintext.
 - `defaults dev.ferrite.Ferrite` — identity salt (32 bytes, key `dev.ferrite.identitySalt`) + hotkey assignments. The salt is load-bearing: losing it orphans every stored titleHash (finding 14).
 - **Rollback:** the old `~/Library/Application Support/MacTLM/` directory and `dev.mactlm.MacTLM` defaults domain were deliberately left intact by the copy-never-delete migration (`LegacyMigration`, one-shot, idempotent). Safe to delete once Ferrite has been trusted for a while.
 

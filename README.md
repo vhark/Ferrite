@@ -17,6 +17,7 @@ Windows stay free-floating and may overlap. Reflow tiles them on demand; Ferrite
 - **Position persistence** — every app's windows are remembered automatically and restored when the app relaunches, when you log in, or when your display configuration changes. No setup.
 - **Workspaces** — snapshot your whole desktop as a named layout, per display. One hotkey restores everything: running apps snap into place, missing apps are launched and placed, stacking order included.
 - **Magnet groups** — drag a window near another's edge and they mate flush. Tune the reach in Preferences → Magnets (32 pt by default). Choose Shrink or Nudge for shared-edge resizing, or Standard to resize only the window you grabbed. Proportional outer-edge/corner scaling is off by default and can be enabled in Preferences → Magnets. ⌘-drag carries the cluster.
+- **Application Clustering Mode (Alpha)** — opt in under Preferences → Magnets to replace existing magnet groups with same-app clusters on each display. Unrelated apps no longer snap together. New windows join their app's cluster; choosing a saved layout or display reflow exits the mode. Switching it off leaves windows in place and restores ordinary magnets.
 - **Reflow presets** — one click tiles a display, or a magnet group, into columns, rows, grid, main+side (either hand), main-centre, a BSP dwindle spiral, cascade, monocle, or a weighted treemap that sizes windows by rank. Click Columns or Rows again on the display row to reverse the window order. Define your own too: a fixed column count, an exact X×Y grid of zones, or a main-centre split with your own proportions.
 - **Private by design** — window titles are never written to disk, only salted hashes. The data files are built to be synced (git, Nextcloud) without leaking your browsing history.
 
@@ -67,7 +68,7 @@ The full manual — every gesture, menu item, preference, CLI diagnostic, and tr
 
 macOS-first and used daily by its author. The core engine (`FerriteCore`) is pure Foundation with no AppKit dependency; Linux support is planned.
 
-**275 unit tests passing.** Tagged milestones have live-acceptance records in the [backlog](docs/BACKLOG.md). M6 reflow presets v2 and Standard resize mode are implemented on `main`; their live walkthrough is in progress, so `v0.12.0-m6` has not been tagged. The first notarized release and Homebrew installation remain pending.
+**296 unit tests passing.** Tagged milestones have live-acceptance records in the [backlog](docs/BACKLOG.md). M6 reflow presets v2 and Standard resize mode are implemented on `main`; their live walkthrough is in progress, so `v0.12.0-m6` has not been tagged. The first notarized release and Homebrew installation remain pending.
 
 ## Acknowledgments
 

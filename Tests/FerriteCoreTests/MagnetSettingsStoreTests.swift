@@ -92,4 +92,32 @@ final class MagnetSettingsStoreTests: XCTestCase {
             XCTAssertEqual(saved["scaleGroupsOnResize"] as? Bool, enabled)
         }
     }
+
+    func testAutomaticClusteringChoiceSurvivesUnrelatedEdits() throws {
+        for enabled in [true, false] {
+            try """
+            {"mateReach": 48, "autoClusterSameApp": \(enabled)}
+            """.data(using: .utf8)!.write(to: url)
+            let store = MagnetSettingsStore(url: url)
+            var settings = store.load()
+            settings.mateReach = 64
+            try store.save(settings)
+            let saved = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: Data(contentsOf: url)) as? [String: Any])
+            XCTAssertEqual(saved["autoClusterSameApp"] as? Bool, enabled)
+            XCTAssertEqual(store.load().mateReach, 64)
+        }
+    }
+
+    func testLegacySettingsDoNotEnableAutomaticWindowMovement() throws {
+        try #"{"mateReach": 76, "scaleGroupsOnResize": true}"#
+            .data(using: .utf8)!.write(to: url)
+        let store = MagnetSettingsStore(url: url)
+        try store.save(store.load())
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(contentsOf: url)) as? [String: Any])
+        XCTAssertEqual(saved["autoClusterSameApp"] as? Bool, false)
+        XCTAssertEqual(saved["mateReach"] as? Double, 76)
+        XCTAssertEqual(saved["scaleGroupsOnResize"] as? Bool, true)
+    }
 }

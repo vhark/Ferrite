@@ -78,6 +78,11 @@ final class MagnetDragSession {
         }
     }
 
+    func cancelGestures() {
+        endDrag()
+        endResize()
+    }
+
     // MARK: - Drag sessions
 
     private struct Neighbour {
@@ -195,7 +200,8 @@ final class MagnetDragSession {
     }
 
     private func openDrag(for event: AppObserver.WindowEvent) {
-        let eligible = eligibleWindows()
+        let eligible = eligibleWindows(limitedTo: coordinator.magnetSettings.autoClusterSameApp
+                                       ? [event.bundleID] : nil)
         // Eligibility of the dragged window falls out of the sweep: the driver
         // only enumerates standard, non-minimized windows of unhidden regular
         // apps, and the sweep drops Ferrite and every excluded bundle.
@@ -738,6 +744,15 @@ final class MagnetDragSession {
     }
 
     // MARK: - Writing frames
+
+    /// Share the drag layer's AX-echo suppression with automatic placements.
+    /// A resized echo must not propagate while placement is validated or undone.
+    func expectOwnWrite(_ frame: CGRect, to window: DriverWindow, bundleID: String) {
+        suppress(frame, ofWindow: window.id)
+        lastResizedFrames[window.id] = frame
+        monitor.noteWrittenFrame(frame, ofWindow: window.id,
+                                 pid: window.pid, bundleID: bundleID)
+    }
 
     /// One frame write, with the policy the restore path uses: set, read back,
     /// one retry if the app missed by more than the tolerance, then accept

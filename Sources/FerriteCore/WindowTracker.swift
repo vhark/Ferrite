@@ -18,11 +18,14 @@ public final class WindowTracker {
     private let saveDebouncer: Debouncer
     private var records: ConfigurationRecords
     private var loadedKey: String
+    /// Capture's live window-to-slot bindings; never persist process-local AX IDs.
+    private var capturedSlots: [String: [Int: Int]] = [:]
 
     /// Called when a capture discovers the live configuration key no longer
     /// matches the loaded one and migrates itself (old key, new key). Core is
     /// Foundation-only and has no logger of its own; the app layer logs this.
     public var onConfigurationDrift: ((String, String) -> Void)?
+    public var onWindowCaptured: ((String, Int) -> Void)?
 
     public init(driver: WindowDriving, store: LayoutStore,
                 configKey: @escaping () -> String,
@@ -68,10 +71,18 @@ public final class WindowTracker {
     public func noteTermination(bundleID: String) {
         saveDebouncer.cancel()
         persist()
+        capturedSlots.removeValue(forKey: bundleID)
     }
 
     public func recordsFor(bundleID: String) -> [WindowRecord] {
         records.apps[bundleID] ?? []
+    }
+    public func capturedSlot(forWindowID id: Int, bundleID: String) -> Int? {
+        capturedSlots[bundleID]?[id]
+    }
+
+    public func liveSlots(forBundleID bundleID: String) -> [Int: Int] {
+        capturedSlots[bundleID] ?? [:]
     }
 
     /// All bundle IDs with remembered windows in the current configuration.
@@ -103,6 +114,7 @@ public final class WindowTracker {
     /// Forgets every remembered window for an app, then flushes.
     public func forgetApp(bundleID: String) {
         records.forgetApp(bundleID: bundleID)
+        capturedSlots.removeValue(forKey: bundleID)
         persist()
     }
 
@@ -136,6 +148,7 @@ public final class WindowTracker {
         persist() // flush old namespace before swapping
         loadedKey = key
         records = store.loadPurgingLegacyTitles(configKey: loadedKey)
+        capturedSlots.removeAll()
     }
 
     /// Merges the open windows into what is already remembered.
@@ -148,25 +161,25 @@ public final class WindowTracker {
     /// apart hit it, as did any user reopening documents one at a time.
     private func capture(bundleID: String) {
         let windows = driver.windows(ofBundleID: bundleID)
-        guard !windows.isEmpty else { return } // keep last-known on close-all
+        guard !windows.isEmpty else {
+            capturedSlots.removeValue(forKey: bundleID)
+            return
+        } // keep last-known records on close-all
         let area = visibleArea()
         guard area.width > 0, area.height > 0 else { return }
         let existing = records.apps[bundleID] ?? []
 
-        // One identity-resolution path: `WindowMatcher` pairs live windows with
-        // records here exactly as it does for restore — pins, then identity
-        // hashes, then order — so capture and restore can never disagree about
-        // which record belongs to which window. The order fallback is gated the
-        // same way `RestoreEngine` gates it: with fewer live windows than
-        // records, the missing ones are simply not open, and pairing the
-        // survivors by z-order would overwrite the wrong record's frame.
+        // A live AX window keeps its slot through title and z-order changes.
+        // Match remembered identities only for windows not yet bound this session.
         let candidates = windows.enumerated().map { index, window in
             WindowCandidate(id: window.id, title: window.title,
                             titleHash: window.titleHash, order: index)
         }
+        let prior = capturedSlots[bundleID] ?? [:]
         let assignment = WindowMatcher.assign(
             records: existing, to: candidates,
-            allowOrderFallback: windows.count >= existing.count)
+            allowOrderFallback: windows.count >= existing.count, liveSlots: prior)
+        var liveSlots: [Int: Int] = [:]
 
         let now = Date()
         var merged = existing
@@ -181,16 +194,24 @@ public final class WindowTracker {
                 merged[index].frame = frame
                 merged[index].titleHash = window.titleHash
                 merged[index].lastSeen = now
+                liveSlots[window.id] = matched.slot
                 seen.insert(matched.slot)
             } else {
                 merged.append(WindowRecord(slot: nextSlot, titleHash: window.titleHash,
                                            frame: frame, pinPattern: nil, lastSeen: now))
                 seen.insert(nextSlot)
+                liveSlots[window.id] = nextSlot
                 nextSlot += 1
             }
         }
         records.apps[bundleID] = evictingOverflow(from: merged, keeping: seen)
             .sorted { $0.slot < $1.slot }
+        capturedSlots[bundleID] = liveSlots
+        if let onWindowCaptured {
+            for window in windows where prior[window.id] == nil {
+                onWindowCaptured(bundleID, window.id)
+            }
+        }
     }
 
     /// Records now outlive the windows they describe, so the list needs a

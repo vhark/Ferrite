@@ -16,7 +16,7 @@ public final class RestoreEngine {
     /// Returns the number of windows a placement was attempted for (clamps accepted).
     @discardableResult
     public func restore(records: [WindowRecord], bundleID: String,
-                        visibleArea: CGRect) -> Int {
+                        visibleArea: CGRect, liveSlots: [Int: Int] = [:]) -> Int {
         guard !records.isEmpty else { return 0 }
         let windows = driver.windows(ofBundleID: bundleID)
         let candidates = windows.enumerated().map { index, window in
@@ -29,7 +29,8 @@ public final class RestoreEngine {
         // a transient window dragged into a remembered slot.
         let allowOrderFallback = windows.count >= records.count
         let assignment = WindowMatcher.assign(records: records, to: candidates,
-                                              allowOrderFallback: allowOrderFallback)
+                                              allowOrderFallback: allowOrderFallback,
+                                              liveSlots: liveSlots)
         var placed = 0
         for window in windows {
             guard let record = assignment[window.id] else { continue }

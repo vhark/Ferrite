@@ -25,6 +25,8 @@ public struct MagnetSettings: Codable, Equatable {
     /// Shared-edge Shrink/Nudge and explicit reflows are independent.
     public var scaleGroupsOnResize = false
 
+    public var autoClusterSameApp = false
+
     private var reach: CGFloat
 
     public init(mateReach: CGFloat = MagnetMating.defaultThreshold) {
@@ -38,6 +40,7 @@ public struct MagnetSettings: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case mateReach
         case scaleGroupsOnResize
+        case autoClusterSameApp
     }
 
     /// Absent-tolerant: a missing field decodes to the built-in default, so a
@@ -49,6 +52,8 @@ public struct MagnetSettings: Codable, Equatable {
         reach = Self.clampedMateReach(stored ?? MagnetMating.defaultThreshold)
         scaleGroupsOnResize = try container.decodeIfPresent(
             Bool.self, forKey: .scaleGroupsOnResize) ?? false
+        autoClusterSameApp = try container.decodeIfPresent(
+            Bool.self, forKey: .autoClusterSameApp) ?? false
     }
 
     /// Hand-written because the stored property is private behind the clamping
@@ -57,6 +62,7 @@ public struct MagnetSettings: Codable, Equatable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(reach, forKey: .mateReach)
         try container.encode(scaleGroupsOnResize, forKey: .scaleGroupsOnResize)
+        try container.encode(autoClusterSameApp, forKey: .autoClusterSameApp)
     }
 }
 

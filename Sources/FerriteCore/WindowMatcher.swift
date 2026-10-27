@@ -21,8 +21,8 @@ public struct WindowCandidate: Equatable {
 }
 
 /// Assigns remembered records to open windows:
-/// 1. pin patterns claim first, 2. identical title hashes, 3. remaining by order.
-/// Phase 3 is opt-out: pass `allowOrderFallback: false` when the open windows
+/// Live session bindings claim first; unbound windows use pin patterns, identical
+/// title hashes, then order. Pass `allowOrderFallback: false` when open windows
 /// cannot be trusted to correspond to the remembered ones.
 public enum WindowMatcher {
     /// Display hint for the order-fallback phase ONLY (merged multi-display
@@ -62,10 +62,21 @@ public enum WindowMatcher {
     public static func assign(records: [WindowRecord],
                               to windows: [WindowCandidate],
                               allowOrderFallback: Bool = true,
-                              affinity: Affinity? = nil) -> [Int: WindowRecord] {
+                              affinity: Affinity? = nil,
+                              liveSlots: [Int: Int] = [:]) -> [Int: WindowRecord] {
         var result: [Int: WindowRecord] = [:]
         var freeRecords = records.sorted { $0.slot < $1.slot }
         var freeWindows = windows.sorted { $0.order < $1.order }
+
+        if !liveSlots.isEmpty {
+            freeWindows.removeAll { window in
+                guard let slot = liveSlots[window.id],
+                      let index = freeRecords.firstIndex(where: { $0.slot == slot })
+                else { return false }
+                result[window.id] = freeRecords.remove(at: index)
+                return true
+            }
+        }
 
         // 1. Pin patterns (case-insensitive regex; empty/invalid patterns ignored).
         var claimed: [Int] = []

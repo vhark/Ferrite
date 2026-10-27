@@ -30,6 +30,26 @@ final class AXWindowHandle {
         (copyValue(kAXMinimizedAttribute) as? Bool) == true
     }
 
+    /// Full-screen AX windows may still advertise the standard subrole.
+    var isFullScreen: Bool {
+        (copyValue("AXFullScreen") as? Bool) == true
+    }
+
+    var canResize: Bool {
+        var settable = DarwinBoolean(false)
+        return AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString,
+                                              &settable) == .success && settable.boolValue
+    }
+
+    /// Apps that publish AXMinSize take precedence over the generic solver floor.
+    var minimumSize: CGSize? {
+        guard let value = copyValue("AXMinSize"),
+              CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue(value as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0 else { return nil }
+        return size
+    }
     var frame: CGRect? { Self.frame(of: element) }
 
     /// The zoom (green) button's frame in CG space, when the window has one.

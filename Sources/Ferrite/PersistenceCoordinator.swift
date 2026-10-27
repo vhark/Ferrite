@@ -20,6 +20,10 @@ final class PersistenceCoordinator {
     let layoutLibraryStore: LayoutLibraryStore
     private let reflowStore: ReflowStore
     private let magnetStore: MagnetSettingsStore
+    private let settingsNotificationObject: String
+    private static let settingsChangedNotification = Notification.Name("dev.ferrite.magnetSettingsChanged")
+    private static let modeExitRequest = Notification.Name("dev.ferrite.applicationClusteringExitRequested")
+    private static let modeExitAcknowledged = Notification.Name("dev.ferrite.applicationClusteringExited")
     private var displayReflowOrder = DisplayReflowOrder()
     /// Held in memory, not re-read per gesture: `updateCandidate` runs on every
     /// AX moved event during a drag, and the drag path must never touch disk
@@ -33,6 +37,8 @@ final class PersistenceCoordinator {
     private lazy var magnetSession = MagnetDragSession(driver: driver,
                                                        monitor: monitor,
                                                        coordinator: self)
+    private lazy var automaticClustering = AutomaticAppClustering(
+        coordinator: self, driver: driver, magnets: magnetSession)
     private struct PendingSettle {
         let debouncer: Debouncer
         let fire: () -> Void
@@ -40,7 +46,13 @@ final class PersistenceCoordinator {
     /// bundleID → armed settle. Presence suppresses tracker capture.
     private var pendingSettles: [String: PendingSettle] = [:]
     private var screenToken: NSObjectProtocol?
-    var isPaused = false
+    private var settingsToken: NSObjectProtocol?
+    private var modeExitToken: NSObjectProtocol?
+    var isPaused = false {
+        didSet {
+            if oldValue && !isPaused { automaticClustering.resumed() }
+        }
+    }
     /// Fires after the record namespace has been swapped, so open UI can
     /// re-read instead of showing the previous configuration's records.
     var onConfigurationChanged: (() -> Void)?
@@ -67,6 +79,7 @@ final class PersistenceCoordinator {
         let supportDir = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Ferrite")
+        settingsNotificationObject = supportDir.path
         // One-shot MacTLM → Ferrite migration, BEFORE any store reads: the
         // stores below adopt whatever is on disk at construction, so the
         // legacy files must already be in place (finding 15: never write the
@@ -100,20 +113,42 @@ final class PersistenceCoordinator {
             configKey: { ScreenGeometry.currentConfiguration.key },
             visibleArea: { ScreenGeometry.cgVisibleAreaOfMainScreen },
             excludeList: { [excludeBox] in excludeBox.list })
-        // A missed didChangeScreenParameters used to stop capture dead; the
-        // tracker now repairs itself, and this is the only trace it leaves.
-        tracker.onConfigurationDrift = { stale, live in
+        engine = RestoreEngine(driver: driver)
+        tracker.onConfigurationDrift = { [weak self] stale, live in
             NSLog("Ferrite: display configuration drifted unnoticed (%@ -> %@); "
                   + "migrated records namespace mid-capture", stale, live)
+            self?.discardMixedApplicationGroups()
         }
-        engine = RestoreEngine(driver: driver)
     }
 
     deinit {
         if let screenToken { NotificationCenter.default.removeObserver(screenToken) }
+        if let settingsToken { DistributedNotificationCenter.default().removeObserver(settingsToken) }
+        if let modeExitToken { DistributedNotificationCenter.default().removeObserver(modeExitToken) }
     }
 
     func start() {
+        discardMixedApplicationGroups()
+        settingsToken = DistributedNotificationCenter.default().addObserver(
+            forName: Self.settingsChangedNotification, object: settingsNotificationObject,
+            queue: .main) { [weak self] _ in
+                guard let self else { return }
+                let settings = self.magnetStore.load()
+                guard settings != self.storedMagnetSettings else { return }
+                self.adoptMagnetSettings(settings)
+            }
+        modeExitToken = DistributedNotificationCenter.default().addObserver(
+            forName: Self.modeExitRequest, object: settingsNotificationObject,
+            queue: .main) { [weak self] notification in
+                guard let self, let request = notification.userInfo?["request"] as? String else { return }
+                self.leaveApplicationClusteringMode()
+                DistributedNotificationCenter.default().postNotificationName(
+                    Self.modeExitAcknowledged, object: request, userInfo: nil, deliverImmediately: true)
+            }
+        automaticClustering.setEnabled(storedMagnetSettings.autoClusterSameApp)
+        tracker.onWindowCaptured = { [weak self] bundleID, id in
+            self?.automaticClustering.observed(windowID: id, bundleID: bundleID)
+        }
         // Arm settle restores for remembered apps that are already running,
         // BEFORE the monitor's startup sweep kickstarts capture — otherwise the
         // sweep overwrites saved records and the login restore becomes a no-op.
@@ -137,24 +172,32 @@ final class PersistenceCoordinator {
         }
         monitor.onAppLaunched = { [weak self] bundleID in
             guard let self, !self.isPaused,
-                  !self.excludeList.isExcluded(bundleID),
-                  !self.tracker.recordsFor(bundleID: bundleID).isEmpty else { return }
+                  !self.excludeList.isExcluded(bundleID) else { return }
             guard self.pendingSettles[bundleID] == nil else { return }
+            if self.storedMagnetSettings.autoClusterSameApp,
+               self.tracker.recordsFor(bundleID: bundleID).isEmpty {
+                self.armSettle(bundleID: bundleID) {}
+                return
+            }
+            guard !self.tracker.recordsFor(bundleID: bundleID).isEmpty else { return }
             self.armSettle(bundleID: bundleID) { [weak self] in
                 self?.restoreRecords(bundleID: bundleID)
             }
         }
         monitor.onAppTerminated = { [weak self] bundleID in
-            if let settle = self?.pendingSettles.removeValue(forKey: bundleID) {
+            guard let self else { return }
+            if let settle = self.pendingSettles.removeValue(forKey: bundleID) {
                 settle.debouncer.cancel()
             }
-            self?.tracker.noteTermination(bundleID: bundleID)
+            self.automaticClustering.appTerminated(bundleID)
+            self.tracker.noteTermination(bundleID: bundleID)
         }
         // Mating and resize propagation ride the rich per-window events. The
         // coarse activity signal above keeps its meaning and its call sites.
         monitor.onWindowEvent = { [weak self] event in
             guard let self, !self.isPaused else { return }
             self.magnetSession.handle(event)
+            self.automaticClustering.observed(windowID: event.windowID, bundleID: event.bundleID)
         }
         monitor.start()
 
@@ -164,7 +207,9 @@ final class PersistenceCoordinator {
             object: nil, queue: .main) { [weak self] _ in
                 guard let self, !self.isPaused else { return }
                 self.tracker.reloadForCurrentConfiguration()
+                self.discardMixedApplicationGroups()
                 self.restoreAll()
+                self.automaticClustering.configurationRestored()
                 // The Apps tab lists one namespace's records; after a swap its
                 // rows describe records the tracker no longer holds.
                 self.onConfigurationChanged?()
@@ -173,8 +218,9 @@ final class PersistenceCoordinator {
         // Login trigger: launched at login → restore everything after a grace
         // period for macOS Resume to finish reopening apps.
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-            guard let self, !self.isPaused else { return }
-            self.restoreAll()
+            guard let self else { return }
+            if !self.isPaused { self.restoreAll() }
+            self.automaticClustering.startupRestored()
         }
 
         refreshShortcuts()
@@ -187,7 +233,8 @@ final class PersistenceCoordinator {
         for bundleID in tracker.rememberedBundleIDs
         where !excludeList.isExcluded(bundleID) {
             engine.restore(records: tracker.recordsFor(bundleID: bundleID),
-                           bundleID: bundleID, visibleArea: area)
+                           bundleID: bundleID, visibleArea: area,
+                           liveSlots: tracker.liveSlots(forBundleID: bundleID))
         }
     }
 
@@ -205,6 +252,7 @@ final class PersistenceCoordinator {
     }
 
     func applyLayout(_ layout: MonitorLayout) {
+        leaveApplicationClusteringMode()
         templateLauncher.apply([layout], excludedBundleIDs: currentExcludedBundleIDs)
     }
 
@@ -212,7 +260,35 @@ final class PersistenceCoordinator {
     func applyBundle(named name: String) {
         let layouts = layoutLibraryStore.load().layouts.filter { $0.name == name }
         guard !layouts.isEmpty else { return }
+        leaveApplicationClusteringMode()
         templateLauncher.apply(layouts, excludedBundleIDs: currentExcludedBundleIDs)
+    }
+
+    /// A CLI coordinator cannot cancel work already executing in the GUI.
+    /// Wait for its main loop to leave the mode before any CLI placement writes.
+    func waitForApplicationClusteringToStop() throws {
+        let bundleID = Bundle.main.bundleIdentifier ?? "dev.ferrite.Ferrite"
+        let runningGUI = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .contains { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier && !$0.isTerminated }
+        guard runningGUI else { return }
+        let center = DistributedNotificationCenter.default()
+        let request = UUID().uuidString
+        var acknowledged = false
+        let token = center.addObserver(forName: Self.modeExitAcknowledged, object: request,
+                                       queue: .main) { _ in acknowledged = true }
+        defer { center.removeObserver(token) }
+        center.postNotificationName(Self.modeExitRequest, object: settingsNotificationObject,
+                                    userInfo: ["request": request], deliverImmediately: true)
+        let deadline = Date(timeIntervalSinceNow: 5)
+        while !acknowledged && Date() < deadline {
+            RunLoop.current.run(until: min(deadline, Date(timeIntervalSinceNow: 0.05)))
+        }
+        guard acknowledged else {
+            throw NSError(domain: "dev.ferrite.layout", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Ferrite did not acknowledge leaving Application Clustering Mode. "
+                    + "No layout was applied; retry when the running app is responsive."
+            ])
+        }
     }
 
     /// Reflows every eligible window on the active display into `preset`.
@@ -220,6 +296,7 @@ final class PersistenceCoordinator {
     /// placed individually — the default) or kept as one tile each. A reflow
     /// is a normal window move: the tracker records the new frames afterwards.
     func reflowDisplay(_ preset: GroupLayoutSolver.Preset) {
+        leaveApplicationClusteringMode()
         let reflow = DisplayGroupReflow(driver: driver,
                                         excludedBundleIDs: currentExcludedBundleIDs,
                                         coordinator: self)
@@ -286,6 +363,7 @@ final class PersistenceCoordinator {
     /// would be undone by the tracker's next debounced save.
     func mate(_ member: MagnetMember, with other: MagnetMember) {
         guard member != other else { return }
+        guard !storedMagnetSettings.autoClusterSameApp || member.bundleID == other.bundleID else { return }
         var groups = tracker.magnetGroups
         let host = groups.firstIndex { $0.contains(bundleID: member.bundleID,
                                                    slot: member.slot) }
@@ -312,6 +390,9 @@ final class PersistenceCoordinator {
         let groups = tracker.magnetGroups
         let remaining = groups.filter { $0.id != groupID }
         guard remaining.count != groups.count else { return }
+        if let group = groups.first(where: { $0.id == groupID }) {
+            suppressAutomaticClustering(for: group.members)
+        }
         tracker.setMagnetGroups(remaining)
     }
 
@@ -324,25 +405,52 @@ final class PersistenceCoordinator {
         guard let index = groups.firstIndex(where: {
             $0.contains(bundleID: bundleID, slot: slot)
         }) else { return }
+        suppressAutomaticClustering(for: [MagnetMember(bundleID: bundleID, slot: slot)])
         groups[index].remove(bundleID: bundleID, slot: slot)
         tracker.setMagnetGroups(groups.filter { !$0.isDissolved })
     }
 
-    /// The record slot a live window resolves to, or nil when its identity is
-    /// not certain. The order fallback is off on purpose: group membership is
-    /// written to disk, and the fallback is a guess — remembering the wrong
-    /// window as a mate is worse than not remembering the mate at all.
+    private func suppressAutomaticClustering(for members: [MagnetMember]) {
+        for (bundleID, members) in Dictionary(grouping: members, by: \.bundleID) {
+            let records = tracker.recordsFor(bundleID: bundleID)
+            // Opt-outs concern open windows, not placement eligibility.
+            // Hidden and minimized members must not be omitted here.
+            let windows = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+                .flatMap { AXAppHandle(pid: $0.processIdentifier).windows }
+                .filter(\.isStandardWindow)
+            let candidates = windows.enumerated().map { index, window in
+                WindowCandidate(id: window.stableID, title: window.title,
+                                titleHash: WindowIdentity.hash(window.title), order: index)
+            }
+            let assignment = WindowMatcher.assign(
+                records: records, to: candidates,
+                allowOrderFallback: candidates.count >= records.count,
+                liveSlots: tracker.liveSlots(forBundleID: bundleID))
+            let slots = Set(members.map(\.slot))
+            for window in windows {
+                guard let slot = assignment[window.stableID]?.slot, slots.contains(slot) else { continue }
+                automaticClustering.manuallyDetached(windowID: window.stableID, bundleID: bundleID)
+            }
+        }
+    }
+
+    /// The live slot assigned during capture, or a certain pin/hash match for
+    /// a window that has not yet been observed by capture this session.
     func slot(forWindowID windowID: Int, bundleID: String) -> Int? {
+        if let slot = tracker.capturedSlot(forWindowID: windowID, bundleID: bundleID) {
+            return slot
+        }
         let records = tracker.recordsFor(bundleID: bundleID)
         let windows = driver.windows(ofBundleID: bundleID)
         guard !records.isEmpty, !windows.isEmpty else { return nil }
         return WindowMatcher.assign(records: records,
                                     to: Self.windowCandidates(windows),
-                                    allowOrderFallback: false)[windowID]?.slot
+                                    allowOrderFallback: false,
+                                    liveSlots: tracker.liveSlots(forBundleID: bundleID))[windowID]?.slot
     }
 
-    /// The members of `group` with a window open right now, resolved the same
-    /// certain-identity way as `slot(forWindowID:bundleID:)`.
+    /// The members of `group` with a window open right now, resolved through
+    /// the tracker's live capture mapping (or certain pin/hash identity).
     func liveMembers(of group: MagnetGroup) -> [LiveMember] {
         var result: [LiveMember] = []
         for (bundleID, members) in Dictionary(grouping: group.members, by: \.bundleID) {
@@ -351,7 +459,8 @@ final class PersistenceCoordinator {
             guard !records.isEmpty, !windows.isEmpty else { continue }
             let assignment = WindowMatcher.assign(records: records,
                                                   to: Self.windowCandidates(windows),
-                                                  allowOrderFallback: false)
+                                                  allowOrderFallback: false,
+                                                  liveSlots: tracker.liveSlots(forBundleID: bundleID))
             for window in windows {
                 guard let slot = assignment[window.id]?.slot,
                       let member = members.first(where: { $0.slot == slot }) else { continue }
@@ -544,9 +653,45 @@ final class PersistenceCoordinator {
     var magnetSettings: MagnetSettings { storedMagnetSettings }
 
     func updateMagnetSettings(_ mutate: (inout MagnetSettings) -> Void) {
-        mutate(&storedMagnetSettings)
-        try? magnetStore.save(storedMagnetSettings)
+        var settings = storedMagnetSettings
+        mutate(&settings)
+        guard settings != storedMagnetSettings else { return }
+        try? magnetStore.save(settings)
+        adoptMagnetSettings(settings)
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.settingsChangedNotification, object: settingsNotificationObject,
+            userInfo: nil, deliverImmediately: true)
+    }
+
+    private func adoptMagnetSettings(_ settings: MagnetSettings) {
+        let changedMode = settings.autoClusterSameApp != storedMagnetSettings.autoClusterSameApp
+        storedMagnetSettings = settings
+        if changedMode {
+            magnetSession.cancelGestures()
+            if settings.autoClusterSameApp {
+                templateLauncher.cancelPendingPlacement()
+                tracker.setMagnetGroups([])
+            }
+        }
+        automaticClustering.setEnabled(settings.autoClusterSameApp)
         onMagnetSettingsChanged?()
+    }
+
+    private func leaveApplicationClusteringMode() {
+        guard storedMagnetSettings.autoClusterSameApp else { return }
+        updateMagnetSettings { $0.autoClusterSameApp = false }
+    }
+
+    private func discardMixedApplicationGroups() {
+        guard storedMagnetSettings.autoClusterSameApp else { return }
+        let groups = tracker.magnetGroups
+        let applicationGroups = groups.filter { group in
+            guard let bundleID = group.members.first?.bundleID else { return false }
+            return group.members.allSatisfy { $0.bundleID == bundleID }
+        }
+        if applicationGroups.count != groups.count {
+            tracker.setMagnetGroups(applicationGroups)
+        }
     }
 
     /// Single funnel for library writes: every mutation notifies open UI.
@@ -593,7 +738,8 @@ final class PersistenceCoordinator {
         guard !windows.isEmpty else { return [:] }
         let assignment = WindowMatcher.assign(
             records: records, to: Self.windowCandidates(windows),
-            allowOrderFallback: windows.count >= records.count)
+            allowOrderFallback: windows.count >= records.count,
+            liveSlots: tracker.liveSlots(forBundleID: bundleID))
         var titles: [Int: String] = [:]
         for window in windows where !window.title.isEmpty {
             guard let record = assignment[window.id] else { continue }
@@ -647,6 +793,7 @@ final class PersistenceCoordinator {
             excludeList.bundleIDs.remove(bundleID)
         }
         try? excludeList.save(to: excludeURL)
+        if excluded { automaticClustering.exclude(bundleID) }
     }
 
     /// Entry editing for the Layouts tab.
@@ -672,6 +819,24 @@ final class PersistenceCoordinator {
         }
     }
 
+    func isExcludedFromAutomaticClustering(_ bundleID: String) -> Bool {
+        bundleID == Bundle.main.bundleIdentifier || excludeList.isExcluded(bundleID)
+    }
+
+    func isSettling(bundleID: String) -> Bool {
+        pendingSettles[bundleID] != nil
+    }
+
+    func capturedSlot(forWindowID id: Int, bundleID: String) -> Int? {
+        tracker.capturedSlot(forWindowID: id, bundleID: bundleID)
+    }
+
+    func captureForAutomaticClustering(_ bundleID: String) {
+        guard !isPaused, !isSettling(bundleID: bundleID),
+              !isExcludedFromAutomaticClustering(bundleID) else { return }
+        tracker.noteActivity(bundleID: bundleID)
+    }
+
     /// Arms (or re-arms) a settle for bundleID. While armed, activity events
     /// feed the settle timer instead of the tracker. `fire` runs once after
     /// 1.5s of quiet (10s cap) and the entry is removed first.
@@ -680,6 +845,7 @@ final class PersistenceCoordinator {
         let settle = PendingSettle(debouncer: debouncer) { [weak self] in
             self?.pendingSettles.removeValue(forKey: bundleID)
             fire()
+            self?.automaticClustering.appSettled(bundleID)
         }
         pendingSettles[bundleID]?.debouncer.cancel()
         pendingSettles[bundleID] = settle
@@ -691,6 +857,7 @@ final class PersistenceCoordinator {
         let area = ScreenGeometry.cgVisibleAreaOfMainScreen
         guard area.width > 0, area.height > 0 else { return }
         engine.restore(records: tracker.recordsFor(bundleID: bundleID),
-                       bundleID: bundleID, visibleArea: area)
+                       bundleID: bundleID, visibleArea: area,
+                       liveSlots: tracker.liveSlots(forBundleID: bundleID))
     }
 }

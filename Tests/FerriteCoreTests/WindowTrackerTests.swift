@@ -26,6 +26,107 @@ final class WindowTrackerTests: XCTestCase {
                       saveDelay: saveDelay)
     }
 
+    func testCapturedSlotUsesActualCaptureAssignmentAcrossLaterEvents() {
+        var seeded = ConfigurationRecords()
+        seeded.apps["app"] = [
+            WindowRecord(slot: 0, titleHash: testHash("Old"),
+                         frame: NormalizedFrame(x: 0, y: 0, w: 0.5, h: 0.5),
+                         pinPattern: nil, lastSeen: Date(timeIntervalSince1970: 0)),
+        ]
+        try? store.save(seeded, configKey: "test-config")
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 71, title: "New",
+                         frame: CGRect(x: 0, y: 25, width: 500, height: 400)),
+        ]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "app")
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 71, bundleID: "app"), 0)
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 71, title: "New",
+                         frame: CGRect(x: 0, y: 25, width: 500, height: 400)),
+            DriverWindow(id: 72, title: "Another",
+                         frame: CGRect(x: 500, y: 25, width: 500, height: 400)),
+        ]
+        tracker.noteActivity(bundleID: "app")
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 72, bundleID: "app"), 1)
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 71, bundleID: "app"), 0)
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 72, title: "Another",
+                         frame: CGRect(x: 500, y: 25, width: 500, height: 400)),
+        ]
+        tracker.noteActivity(bundleID: "app")
+        XCTAssertNil(tracker.capturedSlot(forWindowID: 71, bundleID: "app"))
+    }
+
+    func testCapturedTitlelessSlotsStayWithLiveIDsAcrossZOrderChanges() {
+        let left = DriverWindow(id: 11, title: "",
+                                frame: CGRect(x: 0, y: 25, width: 400, height: 300))
+        let right = DriverWindow(id: 12, title: "",
+                                 frame: CGRect(x: 400, y: 25, width: 400, height: 300))
+        driver.windowsByBundle["app"] = [left, right]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "app")
+        driver.windowsByBundle["app"] = [right, left]
+        tracker.noteActivity(bundleID: "app")
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 11, bundleID: "app"), 0)
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 12, bundleID: "app"), 1)
+    }
+
+    func testRestoreKeepsCapturedIdentitiesAfterFocusChanges() {
+        for title in ["", "Untitled"] {
+            let left = DriverWindow(id: 11, title: title,
+                                    frame: CGRect(x: 0, y: 25, width: 400, height: 300))
+            let right = DriverWindow(id: 12, title: title,
+                                     frame: CGRect(x: 408, y: 25, width: 500, height: 300))
+            driver.windowsByBundle["app"] = [left, right]
+            let tracker = makeTracker()
+            tracker.noteActivity(bundleID: "app")
+            driver.windowsByBundle["app"] = [right, left]
+            tracker.noteActivity(bundleID: "app")
+            driver.setFrameCalls.removeAll()
+            RestoreEngine(driver: driver).restore(records: tracker.recordsFor(bundleID: "app"),
+                                                 bundleID: "app", visibleArea: area,
+                                                 liveSlots: tracker.liveSlots(forBundleID: "app"))
+            XCTAssertEqual(driver.setFrameCalls.first { $0.id == left.id }?.frame, left.frame)
+            XCTAssertEqual(driver.setFrameCalls.first { $0.id == right.id }?.frame, right.frame)
+        }
+    }
+
+    func testDuplicateTitlesDoNotLetNewWindowsStealLiveGroupSlots() {
+        let first = DriverWindow(id: 11, title: "Untitled",
+                                 frame: CGRect(x: 0, y: 25, width: 400, height: 300))
+        let second = DriverWindow(id: 12, title: "Untitled",
+                                  frame: CGRect(x: 408, y: 25, width: 400, height: 300))
+        driver.windowsByBundle["app"] = [first, second]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "app")
+        tracker.setMagnetGroups([MagnetGroup(members: [
+            MagnetMember(bundleID: "app", slot: 0),
+            MagnetMember(bundleID: "app", slot: 1),
+        ])])
+        let newcomer = DriverWindow(id: 13, title: "Untitled",
+                                    frame: CGRect(x: 900, y: 25, width: 400, height: 300))
+        driver.windowsByBundle["app"] = [newcomer, second, first]
+        tracker.noteActivity(bundleID: "app")
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 11, bundleID: "app"), 0)
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 12, bundleID: "app"), 1)
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 13, bundleID: "app"), 2)
+    }
+
+    func testCapturedSlotIsForgottenAtTerminationAndNamespaceChange() {
+        driver.windowsByBundle["app"] = [
+            DriverWindow(id: 71, title: "New",
+                         frame: CGRect(x: 0, y: 25, width: 500, height: 400)),
+        ]
+        let tracker = makeTracker()
+        tracker.noteActivity(bundleID: "app")
+        XCTAssertEqual(tracker.capturedSlot(forWindowID: 71, bundleID: "app"), 0)
+        tracker.noteTermination(bundleID: "app")
+        XCTAssertNil(tracker.capturedSlot(forWindowID: 71, bundleID: "app"))
+        tracker.reloadForCurrentConfiguration()
+        XCTAssertNil(tracker.capturedSlot(forWindowID: 71, bundleID: "app"))
+    }
+
     func testActivityCapturesWindowFrames() {
         driver.windowsByBundle["com.apple.TextEdit"] = [
             DriverWindow(id: 1, title: "Doc",

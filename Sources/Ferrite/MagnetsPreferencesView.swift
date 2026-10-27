@@ -47,6 +47,18 @@ struct MagnetsPreferencesView: View {
                  + "never scales the group.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Divider()
+            Toggle("Application Clustering Mode (Alpha)",
+                   isOn: Binding(get: { model.autoClusterSameApp },
+                                 set: { model.setAutoClusterSameApp($0) }))
+            Text("Replaces existing magnet groups with same-application clusters "
+                 + "on each display. Only windows of the same app snap together "
+                 + "while this mode is on; new windows join their app's cluster. "
+                 + "Choosing a saved layout or display reflow turns the mode off. "
+                 + "Turning it off leaves windows in place and restores normal "
+                 + "magnet behavior.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer()
         }
         .padding(4)
@@ -57,6 +69,7 @@ struct MagnetsPreferencesView: View {
 final class MagnetsPreferencesModel: ObservableObject {
     @Published var mateReach = MagnetMating.defaultThreshold
     @Published var scaleGroupsOnResize = false
+    @Published var autoClusterSameApp = false
     private let coordinator: PersistenceCoordinator
 
     init(coordinator: PersistenceCoordinator) {
@@ -71,6 +84,7 @@ final class MagnetsPreferencesModel: ObservableObject {
     func reload() {
         mateReach = coordinator.magnetSettings.mateReach
         scaleGroupsOnResize = coordinator.magnetSettings.scaleGroupsOnResize
+        autoClusterSameApp = coordinator.magnetSettings.autoClusterSameApp
     }
 
     // Writes through the coordinator, whose hook fires reload — so this never
@@ -82,5 +96,9 @@ final class MagnetsPreferencesModel: ObservableObject {
 
     func setScaleGroupsOnResize(_ enabled: Bool) {
         coordinator.updateMagnetSettings { $0.scaleGroupsOnResize = enabled }
+    }
+
+    func setAutoClusterSameApp(_ enabled: Bool) {
+        coordinator.updateMagnetSettings { $0.autoClusterSameApp = enabled }
     }
 }

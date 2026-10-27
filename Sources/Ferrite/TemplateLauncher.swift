@@ -17,15 +17,19 @@ final class TemplateLauncher {
         self.engine = engine
     }
 
+    func cancelPendingPlacement() {
+        launchDeadline?.cancel()
+        launchDeadline = nil
+        inFlight = nil
+    }
+
     /// Passing a single layout is the ordinary single-display launch; passing a
     /// bundle's layouts restores a whole multi-display workspace at once.
     func apply(_ layouts: [MonitorLayout], excludedBundleIDs: Set<String>) {
         guard !layouts.isEmpty else { return }
         if inFlight != nil {
             // A second apply supersedes the first; the old launches are dropped.
-            launchDeadline?.cancel()
-            launchDeadline = nil
-            inFlight = nil
+            cancelPendingPlacement()
             NSLog("Ferrite: superseding an in-flight template launch")
         }
         var requests: [(layout: MonitorLayout, target: TemplateApplyPlanner.Target)] = []
