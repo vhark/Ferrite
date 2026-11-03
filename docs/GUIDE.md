@@ -135,6 +135,16 @@ Pause Persistence also pauses automatic gathering. Resuming gathers eligible win
 
 ---
 
+## Keep Mac Awake (Alpha)
+
+Enable **Preferences → Power → Keep Mac Awake (Alpha)** or use the Ferrite status-menu item. The mode prevents idle system/display sleep, screen saver, idle lock/logout, and lid-close sleep. Closed-lid operation requires AC power but no external display. Removing AC releases all assertions and shows **Waiting for AC**; reconnecting automatically restores an enabled preference. The preference restores after relaunch and after reboot/login when Launch at Login is allowed.
+
+The first activation registers a privileged LaunchDaemon. macOS may require administrator approval under **System Settings → General → Login Items**. The helper accepts only fixed enable/disable/status requests from Ferrite signed with the same certificate. It never accepts arbitrary commands. Ferrite refuses to adopt an already-active external `SleepDisabled` override and clears only helper-owned state. While the global override is active, manual sleep can also be blocked. Disable Keep Awake to restore normal sleep.
+
+The mode is AC-only and has no thermal/bag sensor. Keep the laptop ventilated. MDM-enforced policies and explicit user lock/logout/shutdown are not bypassed. Automatic-logout prevention remains alpha until the live inactivity protocol passes. If cleanup fails, Ferrite shows **Error** and retries; the manual recovery command is `sudo pmset -a disablesleep 0`.
+
+---
+
 ## Reflow presets
 
 Rows of glyph buttons at the top of the menu. Each button's icon is a miniature render of its preset, drawn by the same solver that will move your windows — a preview cannot disagree with what clicking it does.

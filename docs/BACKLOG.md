@@ -52,6 +52,19 @@ Implemented on `feat/automatic-app-clusters`, running from `build/Ferrite.app` f
 
 **Verification:** 296 unit tests pass, including geometry invariants, impossible fits, closed-member gap filling, order-independent tall-window/stack packing, shrink-only overflow, legacy settings, and stable capture/restore identities for duplicate/titleless windows. Earlier signed native checks covered initial gathering, additions, drag-away through minimize/restore, off/on regrouping, closed-member recovery, titleless additions, duplicate-title Restore All, Ungroup with a minimized member, ⌘-carry, saved-enabled startup, paused-startup/resume, and bounded overflow packing. The Alpha mode was then exercised with two disposable applications and isolated settings: replacement of a mixed-app group, cross-app drag isolation, exact frame/group preservation on toggle-off, restored ordinary snapping, workspace and individual-display layout exit, Columns display-reflow exit, and unchanged saved-layout bytes. Separate-process CLI checks verified acknowledged GUI exit, stable layout placement, no automatic gathering of a subsequent new window, and failure without placement while the GUI was suspended. The Alpha Preferences surface was visually inspected. Only one physical display was available; negative-origin geometry remains covered by core tests.
 
+## Keep Mac Awake (Alpha, 2026-11-03, feature branch)
+
+Implemented on `feat/keep-mac-awake-alpha`: opt-in Preferences → Power and status-menu controls, persisted enabled state, AC-only assertion management for idle system/display sleep, screen saver, and idle lock/logout, plus a privileged, same-certificate-signed LaunchDaemon helper for the owned system-wide sleep override needed by closed-lid use without an external display. Unplugging releases assertions and waits for AC; reconnecting restores an enabled mode. The helper restricts requests to authenticated fixed enable/disable/status operations, rejects adoption of an external override, and cleans up its own state. Reviews and **330 tests** passed; signed app/helper and the actual inactive Power UI were checked. The `.notFound` cleanup/status smoke fix was checked without registering the helper. No active or live sleep/logout/lid/reboot protocol has passed.
+
+**Pending live protocol (not verified):**
+- Authenticated helper activation and active assertions.
+- Shortest-idle screen saver, idle lock, and automatic logout.
+- Lid-open behavior and closed-lid operation on AC without an external display.
+- Unplug/reconnect transitions.
+- Quit, force-kill, helper restart, logout, and reboot restoration/cleanup.
+- Disable and manual recovery behavior.
+- External `SleepDisabled` override and rejected-client behavior.
+
 ## Pending verification
 
 - **Late-arrival restacking (Fix C, `06a98d1`).** When the 15s launch deadline fires before a slow app draws a window, `inFlight` is now retained (`reportedMissing`) so the app rejoins the z-order when it finally settles, with a 120s hard stop. Only reachable on a cold launch of a slow app; not yet observed live. The next full quit-and-relaunch of `Design&Comms` exercises it.
