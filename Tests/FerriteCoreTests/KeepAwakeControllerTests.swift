@@ -291,6 +291,30 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertEqual(helper.pendingDisable.count, 1)
     }
 
+    func testNewGenerationSameStateCleanupQueuesLatestResult() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+
+        controller.setEnabled(false)
+        controller.stop() // newer generation, same requested Off state
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected initial Off cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .failure(
+            InjectedKeepAwakeError(message: "old cleanup failed")))
+
+        guard helper.pendingDisable.count == 2 else {
+            XCTFail("Expected cleanup for latest generation")
+            return
+        }
+        helper.completeDisable(1, with: .failure(
+            InjectedKeepAwakeError(message: "latest cleanup failed")))
+        XCTAssertEqual(controller.state, .error("latest cleanup failed"))
+        XCTAssertFalse(controller.desiredEnabled)
+    }
+
     func testDisableClearsPreferenceAndStopPreservesIt() {
         controller.start()
         controller.setEnabled(true)

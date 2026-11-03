@@ -75,6 +75,7 @@ public final class KeepAwakeController {
     private var busy = false
     private var generation = 0
     private var cleanupState: KeepAwakeState?
+    private var cleanupRequestGeneration: Int?
     private var pendingCleanupState: KeepAwakeState?
 
     public init(store: KeepAwakeSettingsStore,
@@ -238,14 +239,18 @@ public final class KeepAwakeController {
 
     private func requestCleanup(_ normalState: KeepAwakeState) {
         if let activeCleanup = cleanupState {
-            if activeCleanup != normalState { pendingCleanupState = normalState }
+            if activeCleanup != normalState || cleanupRequestGeneration != generation {
+                pendingCleanupState = normalState
+            }
             return
         }
         cleanupState = normalState
+        cleanupRequestGeneration = generation
         let cleanupGeneration = generation
         helper.disable { [weak self] result in
             guard let self else { return }
             self.cleanupState = nil
+            self.cleanupRequestGeneration = nil
             let pending = self.pendingCleanupState
             self.pendingCleanupState = nil
             self.handleCleanupResult(
