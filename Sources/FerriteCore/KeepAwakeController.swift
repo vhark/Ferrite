@@ -74,6 +74,8 @@ public final class KeepAwakeController {
     private var running = false
     private var busy = false
     private var generation = 0
+    private var cleanupState: KeepAwakeState?
+    private var pendingCleanupState: KeepAwakeState?
 
     public init(store: KeepAwakeSettingsStore,
                 powerSource: PowerSourceProviding,
@@ -111,7 +113,7 @@ public final class KeepAwakeController {
         timer?.invalidate()
         timer = nil
         assertions.deactivate()
-        helper.disable { _ in }
+        requestCleanup(.off)
     }
 
     public func setEnabled(_ enabled: Bool) {
@@ -130,36 +132,31 @@ public final class KeepAwakeController {
         } else {
             assertions.deactivate()
             state = .off
-            let cleanupGeneration = generation
-            helper.disable { [weak self] result in
-                self?.handleCleanupResult(result, normalState: .off, generation: cleanupGeneration)
-            }
+            requestCleanup(.off)
             emit()
         }
     }
 
     public func reconcile() {
-        guard running, !busy else { return }
+        guard running else { return }
         let loginWarning = desiredEnabled && loginItem.needsApproval
         if showsLoginWarning != loginWarning {
             showsLoginWarning = loginWarning
             emit()
         }
         guard desiredEnabled else {
-            if case .error = state {
-                assertions.deactivate()
-                generation += 1
-                let cleanupGeneration = generation
-                helper.disable { [weak self] result in
-                    self?.handleCleanupResult(result, normalState: .off, generation: cleanupGeneration)
-                }
-            }
+            if case .error = state { requestCleanup(.off) }
             return
         }
         guard powerSource.isOnAC else {
-            suspendForBattery()
+            if state != .waitingForAC {
+                suspendForBattery()
+            } else {
+                requestCleanup(.waitingForAC)
+            }
             return
         }
+        guard !busy else { return }
         switch state {
         case .active:
             let requestGeneration = generation
@@ -187,9 +184,16 @@ public final class KeepAwakeController {
         helper.enable { [weak self] result in
             guard let self else { return }
             self.busy = false
-            guard self.generation == activationGeneration else { return }
+            guard self.generation == activationGeneration else {
+                if !self.running || !self.desiredEnabled {
+                    self.requestCleanup(.off)
+                } else if !self.powerSource.isOnAC {
+                    self.requestCleanup(.waitingForAC)
+                }
+                return
+            }
             guard self.running, self.desiredEnabled else {
-                self.helper.disable { _ in }
+                self.requestCleanup(.off)
                 return
             }
             guard self.powerSource.isOnAC else {
@@ -204,17 +208,19 @@ public final class KeepAwakeController {
                 } else {
                     self.state = .error(error.localizedDescription)
                 }
+                self.requestCleanup(self.state)
             case let .failure(error):
                 self.assertions.deactivate()
                 self.state = .error(error.localizedDescription)
+                self.requestCleanup(self.state)
             case .success:
                 do {
                     try self.assertions.activate()
                     self.state = .active
                 } catch {
                     self.assertions.deactivate()
-                    self.helper.disable { _ in }
                     self.state = .error(error.localizedDescription)
+                    self.requestCleanup(self.state)
                 }
             }
             self.emit()
@@ -223,14 +229,28 @@ public final class KeepAwakeController {
 
     private func suspendForBattery() {
         generation += 1
-        let cleanupGeneration = generation
         assertions.deactivate()
         state = .waitingForAC
-        helper.disable { [weak self] result in
-            self?.handleCleanupResult(result, normalState: .waitingForAC,
-                                      generation: cleanupGeneration)
-        }
+        requestCleanup(.waitingForAC)
         emit()
+    }
+
+    private func requestCleanup(_ normalState: KeepAwakeState) {
+        if let activeCleanup = cleanupState {
+            if activeCleanup != normalState { pendingCleanupState = normalState }
+            return
+        }
+        cleanupState = normalState
+        let cleanupGeneration = generation
+        helper.disable { [weak self] result in
+            guard let self else { return }
+            self.cleanupState = nil
+            let pending = self.pendingCleanupState
+            self.pendingCleanupState = nil
+            self.handleCleanupResult(
+                result, normalState: normalState, generation: cleanupGeneration)
+            if let pending { self.requestCleanup(pending) }
+        }
     }
 
     private func handleCleanupResult(_ result: Result<Void, Error>,
@@ -247,8 +267,8 @@ public final class KeepAwakeController {
     private func fail(_ message: String) {
         generation += 1
         assertions.deactivate()
-        helper.disable { _ in }
         state = .error(message)
+        requestCleanup(state)
         emit()
     }
 

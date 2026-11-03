@@ -176,6 +176,102 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertTrue(assertions.active)
     }
 
+    func testStaleEnableSuccessAfterDisableIsCleanedUp() {
+        helper.deferCompletions = true
+        controller.start()
+        controller.setEnabled(true)
+        controller.setEnabled(false)
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected preference-disable cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .success(()))
+
+        guard helper.pendingEnable.count == 1 else {
+            XCTFail("Expected pending initial enable")
+            return
+        }
+        helper.completeEnable(0, with: .success(()))
+        XCTAssertTrue(helper.enabled) // stale request briefly takes effect
+        guard helper.pendingDisable.count == 2 else {
+            XCTFail("Expected stale enable cleanup")
+            return
+        }
+        helper.completeDisable(1, with: .success(()))
+        XCTAssertFalse(helper.enabled)
+        XCTAssertEqual(controller.state, .off)
+    }
+
+    func testACLossDuringPendingReactivationReleasesImmediately() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+        helper.enabled = false
+        controller.reconcile() // pending reactivation; assertions remain active
+        power.isOnAC = false
+        controller.reconcile()
+
+        XCTAssertEqual(controller.state, .waitingForAC)
+        XCTAssertFalse(assertions.active)
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected immediate AC-loss cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .success(()))
+        guard helper.pendingEnable.count == 1 else {
+            XCTFail("Expected pending reactivation")
+            return
+        }
+        helper.completeEnable(0, with: .success(()))
+        guard helper.pendingDisable.count == 2 else {
+            XCTFail("Expected stale reactivation cleanup")
+            return
+        }
+        helper.completeDisable(1, with: .success(()))
+        XCTAssertFalse(helper.enabled)
+        XCTAssertEqual(controller.state, .waitingForAC)
+    }
+
+    func testRepeatedBatteryReconciliationKeepsCleanupSingleFlight() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+        power.isOnAC = false
+        controller.reconcile()
+        controller.reconcile()
+        XCTAssertEqual(helper.pendingDisable.count, 1)
+
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected single AC-loss cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .failure(
+            InjectedKeepAwakeError(message: "cleanup failed")))
+        XCTAssertEqual(controller.state, .error("cleanup failed"))
+        controller.reconcile()
+        guard helper.pendingDisable.count == 2 else {
+            XCTFail("Expected cleanup retry")
+            return
+        }
+        helper.completeDisable(1, with: .success(()))
+        XCTAssertEqual(controller.state, .waitingForAC)
+    }
+
+    func testStopCleanupFailureIsVisibleAndPreferenceSurvives() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+        controller.stop()
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected stop cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .failure(
+            InjectedKeepAwakeError(message: "stop cleanup failed")))
+        XCTAssertEqual(controller.state, .error("stop cleanup failed"))
+        XCTAssertTrue(controller.desiredEnabled)
+    }
+
     func testDisableClearsPreferenceAndStopPreservesIt() {
         controller.start()
         controller.setEnabled(true)
