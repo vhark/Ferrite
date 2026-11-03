@@ -63,6 +63,11 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
         queue.async {
             do {
                 try self.installer.uninstall()
+                guard try !self.installer.sleepDisabled() else {
+                    throw KeepAwakeClientError.unavailable(
+                        "SleepDisabled remains active after helper removal; normal sleep is not restored. "
+                            + "Run sudo pmset -a disablesleep 0.")
+                }
                 self.connection = nil
                 DispatchQueue.main.async { completion(.success(())) }
             } catch { self.complete(error, completion: completion) }

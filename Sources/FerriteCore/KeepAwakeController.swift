@@ -103,7 +103,11 @@ public final class KeepAwakeController {
         guard !running else { return }
         running = true
         desiredEnabled = store.load().keepAwakeEnabled
-        if desiredEnabled { registerLoginItem() }
+        if desiredEnabled {
+            registerLoginItem()
+        } else {
+            requestCleanup(.off)
+        }
         let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.reconcile() }
         }
@@ -225,9 +229,9 @@ public final class KeepAwakeController {
                 case let .failure(error): self.fail(error.localizedDescription)
                 }
             }
-        case .off, .waitingForAC, .approvalNeeded:
+        case .off, .waitingForAC:
             beginActivation()
-        case .error:
+        case .approvalNeeded, .error:
             break
         }
     }

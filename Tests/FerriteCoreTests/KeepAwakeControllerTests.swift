@@ -9,8 +9,10 @@ private struct InjectedKeepAwakeError: Error, LocalizedError {
 private final class FakeHelperClient: KeepAwakeHelperClient {
     var enabled = false
     var failure: Error?
+    var enableFailure: Error?
     var uninstallError: Error?
     private(set) var uninstallCount = 0
+    private(set) var enableCount = 0
     private(set) var disableCount = 0
     var deferCompletions = false
     var deferUninstall = false
@@ -33,11 +35,13 @@ private final class FakeHelperClient: KeepAwakeHelperClient {
     }
 
     func enable(completion: @escaping (Result<Void, Error>) -> Void) {
+        enableCount += 1
         if deferCompletions {
             pendingEnable.append(completion)
             return
         }
-        if let failure { completion(.failure(failure)) }
+        if let enableFailure { completion(.failure(enableFailure)) }
+        else if let failure { completion(.failure(failure)) }
         else { enabled = true; completion(.success(())) }
     }
 
@@ -117,6 +121,29 @@ final class KeepAwakeControllerTests: XCTestCase {
     override func tearDown() async throws {
         controller.stop()
         try? FileManager.default.removeItem(at: directory)
+    }
+
+    func testStartWithDisabledPreferenceVerifiesCleanup() {
+        helper.enabled = true
+        controller.start()
+        XCTAssertFalse(helper.enabled)
+        XCTAssertEqual(controller.state, .off)
+    }
+
+    func testStartWithDisabledPreferencePreservesCleanupError() {
+        helper.failure = InjectedKeepAwakeError(message: "cleanup failed")
+        controller.start()
+        XCTAssertEqual(controller.state, .error("cleanup failed"))
+    }
+
+    func testApprovalNeededDoesNotReopenPrompt() {
+        helper.enableFailure = KeepAwakeClientError.approvalNeeded("cancelled")
+        controller.start()
+        controller.setEnabled(true)
+        XCTAssertEqual(controller.state, .approvalNeeded("cancelled"))
+        let count = helper.enableCount
+        controller.reconcile()
+        XCTAssertEqual(helper.enableCount, count)
     }
 
     func testEnableActivatesHelperAssertionsAndLoginWarning() {
