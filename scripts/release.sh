@@ -67,6 +67,8 @@ FERRITE_VERSION="$VERSION" FERRITE_ARCHES="arm64 x86_64" FERRITE_HARDENED=1 \
 
 APP="build/Ferrite.app"
 codesign --verify --strict --deep "$APP"
+codesign --verify --strict "$APP/Contents/MacOS/FerriteKeepAwakeHelper"
+plutil -lint "$APP/Contents/Library/LaunchDaemons/dev.ferrite.Ferrite.KeepAwakeHelper.plist"
 echo "    archs: $(lipo -archs "$APP/Contents/MacOS/Ferrite")"
 
 mkdir -p dist

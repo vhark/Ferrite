@@ -15,6 +15,17 @@ let package = Package(
                 "FerriteCore",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ]),
+        .executableTarget(
+            name: "FerriteKeepAwakeHelper",
+            dependencies: ["FerriteCore"],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Resources/FerriteKeepAwakeHelper-Info.plist"
+                ])
+            ]),
         .testTarget(name: "FerriteCoreTests", dependencies: ["FerriteCore"]),
     ]
 )
