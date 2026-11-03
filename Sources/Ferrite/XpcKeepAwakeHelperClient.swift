@@ -1,86 +1,105 @@
 import Foundation
-import ServiceManagement
 import XPC
 import FerriteCore
 
 final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
     private let queue = DispatchQueue(label: "dev.ferrite.Ferrite.KeepAwakeClient")
     private var connection: xpc_connection_t?
-    private let service = SMAppService.daemon(plistName: KeepAwakeXPC.daemonPlistName)
+    private let installer = DirectLaunchDaemonInstaller()
 
     func enable(completion: @escaping (Result<Void, Error>) -> Void) {
-        do {
-            try registerIfNeeded()
-            request(KeepAwakeXPC.enable) { result in
+        queue.async {
+            do {
+                try self.installer.ensureInstalled()
+                self.request(KeepAwakeXPC.status) { result in
+                    switch result {
+                    case let .failure(error):
+                        completion(.failure(error))
+                    case .success:
+                        self.request(KeepAwakeXPC.enable) { result in
+                            switch result {
+                            case let .failure(error): completion(.failure(error))
+                            case .success: completion(.success(()))
+                            }
+                        }
+                    }
+                }
+            } catch { self.complete(error, completion: completion) }
+        }
+    }
+
+    func disable(completion: @escaping (Result<Void, Error>) -> Void) {
+        queue.async {
+            guard self.installer.isLoaded() else {
+                self.confirmUnloadedSleepState(clean: (), completion: completion)
+                return
+            }
+            self.request(KeepAwakeXPC.disable) { result in
                 switch result {
                 case let .failure(error): completion(.failure(error))
                 case .success: completion(.success(()))
                 }
             }
-        } catch { DispatchQueue.main.async { completion(.failure(error)) } }
-    }
-
-    func disable(completion: @escaping (Result<Void, Error>) -> Void) {
-        switch service.status {
-        case .notRegistered, .notFound, .requiresApproval:
-            DispatchQueue.main.async { completion(.success(())) }
-            return
-        default:
-            break
-        }
-        request(KeepAwakeXPC.disable) { result in
-            switch result {
-            case let .failure(error): completion(.failure(error))
-            case .success: completion(.success(()))
-            }
         }
     }
 
     func status(completion: @escaping (Result<Bool, Error>) -> Void) {
-        switch service.status {
-        case .notRegistered, .notFound:
-            DispatchQueue.main.async { completion(.success(false)) }
-            return
-        default:
-            break
-        }
-        request(KeepAwakeXPC.status) { result in
-            switch result {
-            case let .failure(error): completion(.failure(error))
-            case let .success(message):
-                completion(.success(xpc_dictionary_get_bool(message, KeepAwakeXPC.enabled)))
+        queue.async {
+            guard self.installer.isLoaded() else {
+                self.confirmUnloadedSleepState(clean: false, completion: completion)
+                return
+            }
+            self.request(KeepAwakeXPC.status) { result in
+                switch result {
+                case let .failure(error): completion(.failure(error))
+                case let .success(message):
+                    completion(.success(xpc_dictionary_get_bool(message, KeepAwakeXPC.enabled)))
+                }
             }
         }
     }
 
-    private func registerIfNeeded() throws {
-        if service.status == .notRegistered {
+    func uninstall(completion: @escaping (Result<Void, Error>) -> Void) {
+        queue.async {
             do {
-                try service.register()
-            } catch {
-                switch (error as NSError).code {
-                case kSMErrorLaunchDeniedByUser:
-                    throw KeepAwakeClientError.approvalNeeded(
-                        "Approve Ferrite's privileged helper in System Settings → General → Login Items.")
-                case kSMErrorAlreadyRegistered:
-                    break
-                default:
-                    throw error
-                }
+                try self.installer.uninstall()
+                self.connection = nil
+                DispatchQueue.main.async { completion(.success(())) }
+            } catch { self.complete(error, completion: completion) }
+        }
+    }
+
+    private func confirmUnloadedSleepState<Value>(
+        clean: Value, completion: @escaping (Result<Value, Error>) -> Void
+    ) {
+        do {
+            guard try !installer.sleepDisabled() else {
+                complete(KeepAwakeClientError.unavailable(
+                    "SleepDisabled remains active while the privileged helper is unloaded. "
+                        + "Restore the helper or run sudo pmset -a disablesleep 0."),
+                    completion: completion)
+                return
             }
+            DispatchQueue.main.async { completion(.success(clean)) }
+        } catch {
+            complete(KeepAwakeClientError.unavailable(
+                "Cannot verify SleepDisabled while the privileged helper is unloaded: "
+                    + error.localizedDescription),
+                completion: completion)
         }
-        switch service.status {
-        case .enabled: return
-        case .requiresApproval:
-            throw KeepAwakeClientError.approvalNeeded(
-                "Approve Ferrite's privileged helper in System Settings → General → Login Items.")
-        case .notRegistered:
-            throw KeepAwakeClientError.approvalNeeded("The privileged helper is not registered.")
-        case .notFound:
-            throw KeepAwakeClientError.unavailable("The privileged helper is missing from Ferrite.app.")
-        @unknown default:
-            throw KeepAwakeClientError.unavailable("The privileged helper state is unknown.")
+    }
+
+    private func complete<Value>(
+        _ error: Error, completion: @escaping (Result<Value, Error>) -> Void
+    ) {
+        let mapped: KeepAwakeClientError
+        if error as? DirectLaunchDaemonInstallerError == .approvalCancelled {
+            mapped = .approvalNeeded(
+                "Approve the direct helper installation with your administrator credentials.")
+        } else {
+            mapped = .unavailable(error.localizedDescription)
         }
+        DispatchQueue.main.async { completion(.failure(mapped)) }
     }
 
     private func request(_ operation: String,
@@ -94,10 +113,10 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
                 if xpc_get_type(reply) == XPC_TYPE_ERROR {
                     let description = xpc_dictionary_get_string(reply, XPC_ERROR_KEY_DESCRIPTION)
                         .map { String(cString: $0) } ?? "XPC transport error"
+                    if self.connection.map(ObjectIdentifier.init) == ObjectIdentifier(connection) {
+                        self.connection = nil
+                    }
                     if retryOnDisconnect {
-                        if self.connection.map(ObjectIdentifier.init) == ObjectIdentifier(connection) {
-                            self.connection = nil
-                        }
                         self.queue.asyncAfter(deadline: .now() + 0.5) {
                             self.request(operation, retryOnDisconnect: false, completion: completion)
                         }
@@ -121,7 +140,9 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
 
     private func makeConnection() -> xpc_connection_t {
         if let connection { return connection }
-        let connection = xpc_connection_create_mach_service(KeepAwakeXPC.serviceName, queue, 0)
+        let connection = xpc_connection_create_mach_service(
+            KeepAwakeXPC.serviceName, queue,
+            UInt64(XPC_CONNECTION_MACH_SERVICE_PRIVILEGED))
         let id = ObjectIdentifier(connection)
         xpc_connection_set_event_handler(connection) { [weak self] event in
             if xpc_get_type(event) == XPC_TYPE_ERROR,

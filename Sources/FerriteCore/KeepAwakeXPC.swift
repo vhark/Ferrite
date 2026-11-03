@@ -3,7 +3,6 @@ import Security
 
 public enum KeepAwakeXPC {
     public static let serviceName = "dev.ferrite.Ferrite.KeepAwakeHelper"
-    public static let daemonPlistName = "dev.ferrite.Ferrite.KeepAwakeHelper.plist"
     public static let applicationIdentifier = "dev.ferrite.Ferrite"
     public static let operation = "operation"
     public static let enable = "enable"

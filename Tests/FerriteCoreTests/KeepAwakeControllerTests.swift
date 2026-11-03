@@ -9,10 +9,14 @@ private struct InjectedKeepAwakeError: Error, LocalizedError {
 private final class FakeHelperClient: KeepAwakeHelperClient {
     var enabled = false
     var failure: Error?
+    var uninstallError: Error?
+    private(set) var uninstallCount = 0
     private(set) var disableCount = 0
     var deferCompletions = false
+    var deferUninstall = false
     private(set) var pendingEnable: [(Result<Void, Error>) -> Void] = []
     private(set) var pendingDisable: [(Result<Void, Error>) -> Void] = []
+    private(set) var pendingUninstall: [(Result<Void, Error>) -> Void] = []
 
     func completeEnable(_ index: Int, with result: Result<Void, Error>) {
         if case .success = result { enabled = true }
@@ -22,6 +26,10 @@ private final class FakeHelperClient: KeepAwakeHelperClient {
     func completeDisable(_ index: Int, with result: Result<Void, Error>) {
         if case .success = result { enabled = false }
         pendingDisable[index](result)
+    }
+
+    func completeUninstall(_ index: Int, with result: Result<Void, Error>) {
+        pendingUninstall[index](result)
     }
 
     func enable(completion: @escaping (Result<Void, Error>) -> Void) {
@@ -41,6 +49,16 @@ private final class FakeHelperClient: KeepAwakeHelperClient {
         }
         enabled = false
         if let failure { completion(.failure(failure)) }
+        else { completion(.success(())) }
+    }
+
+    func uninstall(completion: @escaping (Result<Void, Error>) -> Void) {
+        uninstallCount += 1
+        if deferUninstall {
+            pendingUninstall.append(completion)
+            return
+        }
+        if let uninstallError { completion(.failure(uninstallError)) }
         else { completion(.success(())) }
     }
 
@@ -479,6 +497,57 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertEqual(observed.last, .off)
         XCTAssertEqual(controller.state, .off)
         XCTAssertTrue(controller.desiredEnabled)
+    }
+
+    func testUninstallRequiresKeepAwakeOff() {
+        controller.start()
+        controller.setEnabled(true)
+        controller.uninstallHelper()
+        XCTAssertEqual(helper.uninstallCount, 0)
+        guard case let .error(message) = controller.state else {
+            XCTFail("Expected uninstall-disabled error")
+            return
+        }
+        XCTAssertTrue(message.contains("Turn off Keep Mac Awake"))
+    }
+
+    func testUninstallSuccessReturnsOff() {
+        controller.start()
+        controller.uninstallHelper()
+        XCTAssertEqual(helper.uninstallCount, 1)
+        XCTAssertEqual(controller.state, .off)
+    }
+
+    func testUninstallFailureIsVisible() {
+        controller.start()
+        helper.uninstallError = InjectedKeepAwakeError(message: "uninstall failed")
+        controller.uninstallHelper()
+        XCTAssertEqual(controller.state, .error("uninstall failed"))
+    }
+
+    func testUninstallPublishesApprovalBeforeCompletion() {
+        controller.start()
+        helper.deferUninstall = true
+        var observed: [KeepAwakeState] = []
+        controller.onChange = { [weak self] in
+            guard let self else { return }
+            observed.append(self.controller.state)
+        }
+        controller.uninstallHelper()
+        guard case .approvalNeeded = observed.last else {
+            XCTFail("Expected approval state to be emitted before completion")
+            return
+        }
+        helper.completeUninstall(0, with: .success(()))
+        XCTAssertEqual(observed.last, .off)
+    }
+
+    func testUninstallFailureSurvivesReconciliation() {
+        controller.start()
+        helper.uninstallError = InjectedKeepAwakeError(message: "uninstall failed")
+        controller.uninstallHelper()
+        controller.reconcile()
+        XCTAssertEqual(controller.state, .error("uninstall failed"))
     }
 
     func testDisableClearsPreferenceAndStopPreservesIt() {

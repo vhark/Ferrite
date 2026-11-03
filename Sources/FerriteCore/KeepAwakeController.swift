@@ -32,6 +32,7 @@ public protocol KeepAwakeHelperClient: AnyObject {
     func enable(completion: @escaping (Result<Void, Error>) -> Void)
     func disable(completion: @escaping (Result<Void, Error>) -> Void)
     func status(completion: @escaping (Result<Bool, Error>) -> Void)
+    func uninstall(completion: @escaping (Result<Void, Error>) -> Void)
 }
 
 @MainActor
@@ -78,6 +79,7 @@ public final class KeepAwakeController {
     private var cleanupRequestGeneration: Int?
     private var pendingCleanupState: KeepAwakeState?
     private var preferenceErrorMessage: String?
+    private var uninstallErrorMessage: String?
     private var cleanupFailed = false
 
     public init(store: KeepAwakeSettingsStore,
@@ -127,6 +129,10 @@ public final class KeepAwakeController {
         generation += 1
         busy = false
         desiredEnabled = enabled
+        if enabled, uninstallErrorMessage != nil {
+            uninstallErrorMessage = nil
+            if case .error = state { state = .off }
+        }
         if !enabled { assertions.deactivate() }
         do {
             try store.save(KeepAwakeSettings(keepAwakeEnabled: enabled))
@@ -152,6 +158,37 @@ public final class KeepAwakeController {
         }
     }
 
+    public func uninstallHelper() {
+        guard !desiredEnabled else {
+            state = .error("Turn off Keep Mac Awake before removing the helper.")
+            emit()
+            return
+        }
+        uninstallErrorMessage = nil
+        state = .approvalNeeded("Approve helper removal with administrator credentials.")
+        emit()
+        helper.uninstall { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                self.uninstallErrorMessage = nil
+                self.state = .off
+            case let .failure(error as KeepAwakeClientError):
+                if case let .approvalNeeded(message) = error {
+                    self.uninstallErrorMessage = nil
+                    self.state = .approvalNeeded(message)
+                } else {
+                    self.uninstallErrorMessage = error.localizedDescription
+                    self.state = .error(error.localizedDescription)
+                }
+            case let .failure(error):
+                self.uninstallErrorMessage = error.localizedDescription
+                self.state = .error(error.localizedDescription)
+            }
+            self.emit()
+        }
+    }
+
     public func reconcile() {
         guard running else { return }
         let loginWarning = desiredEnabled && loginItem.needsApproval
@@ -160,7 +197,8 @@ public final class KeepAwakeController {
             emit()
         }
         guard desiredEnabled else {
-            if case .error = state, preferenceErrorMessage == nil || cleanupFailed {
+            if case .error = state, uninstallErrorMessage == nil,
+               preferenceErrorMessage == nil || cleanupFailed {
                 requestCleanup(.off)
             }
             return

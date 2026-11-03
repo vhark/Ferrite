@@ -114,12 +114,11 @@ public final class SleepOverrideController {
         if !powerSource.isOnAC { try disable() }
     }
 
-    private func querySleepDisabled() throws -> Bool {
-        let result = try runChecked(["-g"])
-        guard result.output.contains("System-wide power settings:") else {
+    public static func parseSleepDisabled(from output: String) throws -> Bool {
+        guard output.contains("System-wide power settings:") else {
             throw SleepOverrideError.unreadableSettings
         }
-        for line in result.output.split(whereSeparator: \.isNewline) {
+        for line in output.split(whereSeparator: \.isNewline) {
             let fields = line.split(whereSeparator: \.isWhitespace)
             if fields.count == 2, fields[0] == "SleepDisabled" {
                 if fields[1] == "1" { return true }
@@ -128,6 +127,11 @@ public final class SleepOverrideController {
             }
         }
         return false
+    }
+
+    private func querySleepDisabled() throws -> Bool {
+        let result = try runChecked(["-g"])
+        return try Self.parseSleepDisabled(from: result.output)
     }
 
     @discardableResult

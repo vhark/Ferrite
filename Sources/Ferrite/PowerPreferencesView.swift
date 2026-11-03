@@ -29,6 +29,8 @@ struct PowerPreferencesView: View {
                      + "sudo pmset -a disablesleep 0")
                     .font(.caption).foregroundStyle(.red)
             }
+            Button("Remove Privileged Helper…", action: model.uninstallHelper)
+                .disabled(model.enabled)
             Spacer()
         }
         .padding(4)
@@ -62,4 +64,5 @@ final class PowerPreferencesModel: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool) { controller.setEnabled(enabled) }
+    func uninstallHelper() { controller.uninstallHelper() }
 }
