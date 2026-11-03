@@ -73,6 +73,7 @@ public final class KeepAwakeController {
     private var timer: Timer?
     private var running = false
     private var busy = false
+    private var generation = 0
 
     public init(store: KeepAwakeSettingsStore,
                 powerSource: PowerSourceProviding,
@@ -90,6 +91,7 @@ public final class KeepAwakeController {
     }
 
     public func start() {
+        generation += 1
         guard !running else { return }
         running = true
         desiredEnabled = store.load().keepAwakeEnabled
@@ -104,6 +106,7 @@ public final class KeepAwakeController {
     }
 
     public func stop() {
+        generation += 1
         running = false
         timer?.invalidate()
         timer = nil
@@ -112,6 +115,7 @@ public final class KeepAwakeController {
     }
 
     public func setEnabled(_ enabled: Bool) {
+        generation += 1
         desiredEnabled = enabled
         do {
             try store.save(KeepAwakeSettings(keepAwakeEnabled: enabled))
@@ -126,8 +130,9 @@ public final class KeepAwakeController {
         } else {
             assertions.deactivate()
             state = .off
+            let cleanupGeneration = generation
             helper.disable { [weak self] result in
-                self?.handleCleanupResult(result, normalState: .off)
+                self?.handleCleanupResult(result, normalState: .off, generation: cleanupGeneration)
             }
             emit()
         }
@@ -143,8 +148,10 @@ public final class KeepAwakeController {
         guard desiredEnabled else {
             if case .error = state {
                 assertions.deactivate()
+                generation += 1
+                let cleanupGeneration = generation
                 helper.disable { [weak self] result in
-                    self?.handleCleanupResult(result, normalState: .off)
+                    self?.handleCleanupResult(result, normalState: .off, generation: cleanupGeneration)
                 }
             }
             return
@@ -155,8 +162,10 @@ public final class KeepAwakeController {
         }
         switch state {
         case .active:
+            let requestGeneration = generation
             helper.status { [weak self] result in
-                guard let self, self.running, self.desiredEnabled else { return }
+                guard let self, self.running, self.desiredEnabled,
+                      self.generation == requestGeneration else { return }
                 switch result {
                 case .success(false): self.beginActivation()
                 case .success(true): break
@@ -172,10 +181,13 @@ public final class KeepAwakeController {
 
     private func beginActivation() {
         guard !busy else { return }
+        generation += 1
+        let activationGeneration = generation
         busy = true
         helper.enable { [weak self] result in
             guard let self else { return }
             self.busy = false
+            guard self.generation == activationGeneration else { return }
             guard self.running, self.desiredEnabled else {
                 self.helper.disable { _ in }
                 return
@@ -210,15 +222,21 @@ public final class KeepAwakeController {
     }
 
     private func suspendForBattery() {
+        generation += 1
+        let cleanupGeneration = generation
         assertions.deactivate()
         state = .waitingForAC
         helper.disable { [weak self] result in
-            self?.handleCleanupResult(result, normalState: .waitingForAC)
+            self?.handleCleanupResult(result, normalState: .waitingForAC,
+                                      generation: cleanupGeneration)
         }
         emit()
     }
 
-    private func handleCleanupResult(_ result: Result<Void, Error>, normalState: KeepAwakeState) {
+    private func handleCleanupResult(_ result: Result<Void, Error>,
+                                     normalState: KeepAwakeState,
+                                     generation cleanupGeneration: Int) {
+        guard generation == cleanupGeneration else { return }
         switch result {
         case .success: state = normalState
         case let .failure(error): state = .error(error.localizedDescription)
@@ -227,6 +245,7 @@ public final class KeepAwakeController {
     }
 
     private func fail(_ message: String) {
+        generation += 1
         assertions.deactivate()
         helper.disable { _ in }
         state = .error(message)

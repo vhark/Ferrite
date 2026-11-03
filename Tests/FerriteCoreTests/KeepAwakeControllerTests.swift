@@ -10,14 +10,35 @@ private final class FakeHelperClient: KeepAwakeHelperClient {
     var enabled = false
     var failure: Error?
     private(set) var disableCount = 0
+    var deferCompletions = false
+    private(set) var pendingEnable: [(Result<Void, Error>) -> Void] = []
+    private(set) var pendingDisable: [(Result<Void, Error>) -> Void] = []
+
+    func completeEnable(_ index: Int, with result: Result<Void, Error>) {
+        if case .success = result { enabled = true }
+        pendingEnable[index](result)
+    }
+
+    func completeDisable(_ index: Int, with result: Result<Void, Error>) {
+        if case .success = result { enabled = false }
+        pendingDisable[index](result)
+    }
 
     func enable(completion: @escaping (Result<Void, Error>) -> Void) {
+        if deferCompletions {
+            pendingEnable.append(completion)
+            return
+        }
         if let failure { completion(.failure(failure)) }
         else { enabled = true; completion(.success(())) }
     }
 
     func disable(completion: @escaping (Result<Void, Error>) -> Void) {
         disableCount += 1
+        if deferCompletions {
+            pendingDisable.append(completion)
+            return
+        }
         enabled = false
         if let failure { completion(.failure(failure)) }
         else { completion(.success(())) }
@@ -131,6 +152,28 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertTrue(helper.enabled)
         XCTAssertTrue(assertions.active)
         XCTAssertEqual(assertions.activationCount, 1)
+    }
+
+    func testStaleCleanupCompletionDoesNotOverwriteReactivatedState() {
+        helper.deferCompletions = true
+        controller.start()
+        controller.setEnabled(true)
+        helper.completeEnable(0, with: .success(()))
+        XCTAssertEqual(controller.state, .active)
+
+        power.isOnAC = false
+        controller.reconcile()
+        XCTAssertEqual(controller.state, .waitingForAC)
+
+        power.isOnAC = true
+        controller.reconcile()
+        helper.completeEnable(1, with: .success(()))
+        XCTAssertEqual(controller.state, .active)
+
+        // The old AC-loss cleanup completes after reactivation.
+        helper.completeDisable(0, with: .success(()))
+        XCTAssertEqual(controller.state, .active)
+        XCTAssertTrue(assertions.active)
     }
 
     func testDisableClearsPreferenceAndStopPreservesIt() {
