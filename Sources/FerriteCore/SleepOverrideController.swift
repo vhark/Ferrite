@@ -24,6 +24,8 @@ public enum SleepOverrideError: Error, Equatable, LocalizedError {
     case externalOverride
     case commandFailed(Int32, String)
     case stateMismatch(expected: Bool)
+    case cleanupFailed(original: String, rollback: String)
+    case unreadableSettings
 
     public var errorDescription: String? {
         switch self {
@@ -35,6 +37,10 @@ public enum SleepOverrideError: Error, Equatable, LocalizedError {
             return "pmset failed with exit code \(code): \(output)"
         case let .stateMismatch(expected):
             return "SleepDisabled did not reach the expected value \(expected ? 1 : 0)."
+        case let .cleanupFailed(original, rollback):
+            return "Activation failed (\(original)); rollback also failed (\(rollback)). Ferrite retains ownership for cleanup retry."
+        case .unreadableSettings:
+            return "pmset returned unreadable system power settings."
         }
     }
 }
@@ -70,15 +76,28 @@ public final class SleepOverrideController {
             if try ownership.load() { return }
             throw SleepOverrideError.externalOverride
         }
+
+        // Pending ownership makes a crash or failed rollback recoverable.
+        try ownership.save(true)
         do {
             try runChecked(["-a", "disablesleep", "1"])
             guard try querySleepDisabled() else {
                 throw SleepOverrideError.stateMismatch(expected: true)
             }
-            try ownership.save(true)
         } catch {
-            _ = try? runChecked(["-a", "disablesleep", "0"])
-            throw error
+            let activationError = error
+            do {
+                _ = try runChecked(["-a", "disablesleep", "0"])
+                guard try !querySleepDisabled() else {
+                    throw SleepOverrideError.stateMismatch(expected: false)
+                }
+                try ownership.save(false)
+            } catch {
+                throw SleepOverrideError.cleanupFailed(
+                    original: activationError.localizedDescription,
+                    rollback: error.localizedDescription)
+            }
+            throw activationError
         }
     }
 
@@ -97,10 +116,15 @@ public final class SleepOverrideController {
 
     private func querySleepDisabled() throws -> Bool {
         let result = try runChecked(["-g"])
+        guard result.output.contains("System-wide power settings:") else {
+            throw SleepOverrideError.unreadableSettings
+        }
         for line in result.output.split(whereSeparator: \.isNewline) {
             let fields = line.split(whereSeparator: \.isWhitespace)
             if fields.count == 2, fields[0] == "SleepDisabled" {
-                return fields[1] == "1"
+                if fields[1] == "1" { return true }
+                if fields[1] == "0" { return false }
+                throw SleepOverrideError.unreadableSettings
             }
         }
         return false
