@@ -206,6 +206,8 @@ public final class KeepAwakeController {
                     self.requestCleanup(.off)
                 } else if !self.powerSource.isOnAC {
                     self.requestCleanup(.waitingForAC)
+                } else if case .error = self.state {
+                    self.requestCleanup(self.state)
                 }
                 return
             }

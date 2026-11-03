@@ -232,6 +232,36 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertEqual(controller.state, .waitingForAC)
     }
 
+    func testStaleEnableAfterAssertionFailureIsRolledBack() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+        helper.enabled = false
+        controller.reconcile() // deferred reactivation
+
+        assertions.onFailure?("heartbeat failed")
+        XCTAssertEqual(controller.state, .error("heartbeat failed"))
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected assertion-failure cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .success(()))
+        guard helper.pendingEnable.count == 1 else {
+            XCTFail("Expected pending reactivation")
+            return
+        }
+        helper.completeEnable(0, with: .success(()))
+        guard helper.pendingDisable.count == 2 else {
+            XCTFail("Expected stale enable to be rolled back")
+            return
+        }
+        helper.completeDisable(1, with: .success(()))
+
+        XCTAssertFalse(helper.enabled)
+        XCTAssertFalse(assertions.active)
+        XCTAssertEqual(controller.state, .error("heartbeat failed"))
+    }
+
     func testRepeatedBatteryReconciliationKeepsCleanupSingleFlight() {
         controller.start()
         controller.setEnabled(true)
