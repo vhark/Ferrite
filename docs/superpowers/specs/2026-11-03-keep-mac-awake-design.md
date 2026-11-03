@@ -4,6 +4,8 @@
 - **Baseline:** `10f44f9` (`feat/automatic-app-clusters`)
 - **Requested behavior:** Caffeine-style keep-awake operation, extended to closed-lid use without an external display.
 
+**Implementation amendment (2026-11-03):** The original `SMAppService.daemon` registration/approval steps below are superseded for the helper: the shared self-signed Ferrite Dev certificate reports `TeamIdentifier=not set`, so installation and uninstall use direct administrator approval rather than helper approval in Login Items. Ferrite validates both signatures, the helper identifier and matching non-ad-hoc certificate, and the bundled plist's *exact* keys/values (`Label`, `Program`, `FerriteHelperVersion=1`, `RunAtLoad=true`, `KeepAlive=true`, one true `MachServices` entry under the helper label). The privileged command copies the helper and plist into root-owned staging and rechecks the helper signature/CDHash and plist SHA-256 before cutover; failed upgrade cutover restores the previous files and loaded state. Direct uninstall stops the service, clears recorded helper-owned override state, and removes the installed files. When the helper is unloaded, disable/status inspect actual `SleepDisabled` rather than treating an absent helper as clean. Reboot acceptance remains deferred, not verified.
+
 ## 1. Feature contract
 
 **Keep Mac Awake (Alpha)** is an opt-in Ferrite feature. While active on AC power it must:

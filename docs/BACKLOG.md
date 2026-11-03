@@ -54,16 +54,13 @@ Implemented on `feat/automatic-app-clusters`, running from `build/Ferrite.app` f
 
 ## Keep Mac Awake (Alpha, 2026-11-03, feature branch)
 
-Implemented on `feat/keep-mac-awake-alpha`: opt-in Preferences → Power and status-menu controls, persisted enabled state, AC-only assertion management for idle system/display sleep, screen saver, and idle lock/logout, plus a privileged, same-certificate-signed LaunchDaemon helper for the owned system-wide sleep override needed by closed-lid use without an external display. Unplugging releases assertions and waits for AC; reconnecting restores an enabled mode. The helper restricts requests to authenticated fixed enable/disable/status operations, rejects adoption of an external override, and cleans up its own state. Reviews and **330 tests** passed; signed app/helper and the actual inactive Power UI were checked. The `.notFound` cleanup/status smoke fix was checked without registering the helper. No active or live sleep/logout/lid/reboot protocol has passed.
+Implemented on `feat/keep-mac-awake-alpha`: opt-in Preferences → Power and status-menu controls, persisted enabled state, AC-only assertion management for idle system/display sleep, screen saver, and idle lock/logout, plus a privileged, same-certificate-signed LaunchDaemon helper for the owned system-wide closed-lid sleep override. With the self-signed Ferrite Dev certificate lacking a Team ID (`TeamIdentifier=not set`), direct administrator approval replaced the proposed `SMAppService.daemon` route. The helper restricts requests to authenticated fixed enable/disable/status operations, rejects an external override, and cleans up its own state. Root-staged signature/hash checks and an exact LaunchDaemon plist schema precede cutover; failed upgrades roll back and uninstall removes the daemon directly. **335 tests passed**; the actual inactive Power UI was also checked live.
 
-**Pending live protocol (not verified):**
-- Authenticated helper activation and active assertions.
-- Shortest-idle screen saver, idle lock, and automatic logout.
-- Lid-open behavior and closed-lid operation on AC without an external display.
-- Unplug/reconnect transitions.
-- Quit, force-kill, helper restart, logout, and reboot restoration/cleanup.
-- Disable and manual recovery behavior.
-- External `SleepDisabled` override and rejected-client behavior.
+**Verified live on 2026-11-03:** macOS 27.2, MacBook Pro Mac14,6 (Apple M2 Max), AC power, Ferrite/app helper signed with the shared self-signed Ferrite Dev certificate. Direct admin install started `/Library/PrivilegedHelperTools/dev.ferrite.Ferrite.KeepAwakeHelper` using `/Library/LaunchDaemons/dev.ferrite.Ferrite.KeepAwakeHelper.plist`. With Power **Active**, `SleepDisabled 1` and Ferrite-owned `PreventUserIdleSystemSleep`, `PreventUserIdleDisplaySleep`, and `UserIsActive` were observed. Ten minutes untouched with 60-second screen saver/immediate password, five-minute auto logout, and one-minute AC system/display sleep left the login session and apps open, without sleep, screen saver, lock, or logout; Power remained **Active**. Closed lid without an external display for over two minutes on AC passed; unplugging while closed for over two minutes and reconnecting passed, with `SleepDisabled` and assertions restored on reconnect. Normal quit and forced app termination cleared `SleepDisabled`; relaunch restored it. Forced helper termination restarted it under a new PID and restored assertions; logout/login restored operation. Disable restored `SleepDisabled 0` and removed assertions. An external override was refused and left untouched; an unsigned client was rejected for signing identity. Uninstall removed the service/files; reinstall restored a running helper/assertions. Temporary security and `pmset` settings were restored, and the preference was left false with the helper installed.
+
+**Keep Awake pending live protocol (user-deferred only):**
+- Reboot on AC: verify helper cleanup and Ferrite restoration after login.
+- Reboot on battery: verify **Waiting for AC** rather than activation, then AC reconnect behavior.
 
 ## Pending verification
 

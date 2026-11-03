@@ -10,6 +10,8 @@
 
 **Approved spec:** `docs/superpowers/specs/2026-11-03-keep-mac-awake-design.md`.
 
+**Implemented architecture amendment (2026-11-03):** The `SMAppService.daemon` helper-registration steps and Login Items helper-approval assumptions in this historical plan were replaced: the self-signed Ferrite Dev certificate has `TeamIdentifier=not set`, so `DirectLaunchDaemonInstaller` requests administrator approval for direct install/uninstall. It checks app/helper signatures, expected helper identity and shared non-ad-hoc certificate, and the exact plist schema (`Label`, installed `Program`, `FerriteHelperVersion=1`, `RunAtLoad=true`, `KeepAlive=true`, one true `MachServices` entry for the label). The root command stages the helper/plist, rechecks signature/CDHash and SHA-256 respectively, then cuts over transactionally, restoring previous files and loaded service on failed upgrade. Direct uninstall boots out the helper, clears recorded helper-owned override state, and removes both installed files. Unloaded-helper disable/status check actual `SleepDisabled`; reboot-on-AC and reboot-on-battery live cases remain deferred.
+
 ---
 
 ## File structure
