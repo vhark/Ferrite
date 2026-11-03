@@ -69,14 +69,14 @@ final class KeepAwakeHelperDaemon {
                         connection: xpc_connection_t,
                         id: ObjectIdentifier) {
         guard validator?.accepts(message) == true else {
-            reply(to: connection, enabled: nil, error:
+            reply(to: message, connection: connection, enabled: nil, error:
                 "Client signing identity rejected; app and helper must share a non-ad-hoc certificate.")
             xpc_connection_cancel(connection)
             return
         }
         clients.insert(id)
         guard let raw = xpc_dictionary_get_string(message, KeepAwakeXPC.operation) else {
-            reply(to: connection, enabled: nil, error: "Missing operation.")
+            reply(to: message, connection: connection, enabled: nil, error: "Missing operation.")
             return
         }
         let operation = String(cString: raw)
@@ -86,33 +86,34 @@ final class KeepAwakeHelperDaemon {
                 guard !recoveryPending else {
                     let reason = lastError.map { "Startup cleanup is still pending: \($0)" }
                         ?? "Startup cleanup is still pending."
-                    reply(to: connection, enabled: nil, error: reason)
+                    reply(to: message, connection: connection, enabled: nil, error: reason)
                     return
                 }
                 try controller.enable()
                 lastError = nil
-                reply(to: connection, enabled: true, error: lastError)
+                reply(to: message, connection: connection, enabled: true, error: lastError)
             case KeepAwakeXPC.disable:
                 try controller.disable()
                 recoveryPending = false
                 lastError = nil
-                reply(to: connection, enabled: false, error: nil)
+                reply(to: message, connection: connection, enabled: false, error: nil)
             case KeepAwakeXPC.status:
                 let enabled = try controller.status()
-                reply(to: connection, enabled: enabled, error: lastError)
+                reply(to: message, connection: connection, enabled: enabled, error: lastError)
             default:
-                reply(to: connection, enabled: nil, error: "Unknown operation.")
+                reply(to: message, connection: connection, enabled: nil, error: "Unknown operation.")
             }
         } catch {
             recoveryPending = controller.needsCleanup
             lastError = error.localizedDescription
-            reply(to: connection, enabled: nil, error: lastError)
+            reply(to: message, connection: connection, enabled: nil, error: lastError)
         }
     }
 
-    private func reply(to connection: xpc_connection_t,
+    private func reply(to request: xpc_object_t,
+                       connection: xpc_connection_t,
                        enabled: Bool?, error: String?) {
-        let reply = xpc_dictionary_create(nil, nil, 0)
+        guard let reply = xpc_dictionary_create_reply(request) else { return }
         if let enabled { xpc_dictionary_set_bool(reply, KeepAwakeXPC.enabled, enabled) }
         if let error {
             error.withCString { xpc_dictionary_set_string(reply, KeepAwakeXPC.error, $0) }
