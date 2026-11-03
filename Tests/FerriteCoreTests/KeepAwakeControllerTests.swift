@@ -359,6 +359,19 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertEqual(controller.state, .active)
     }
 
+    func testStopPublishesOffBeforeCleanupCompletes() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+        var observed: [KeepAwakeState] = []
+        controller.onChange = { observed.append(self.controller.state) }
+
+        controller.stop()
+        XCTAssertEqual(observed.last, .off)
+        XCTAssertEqual(controller.state, .off)
+        XCTAssertTrue(controller.desiredEnabled)
+    }
+
     func testDisableClearsPreferenceAndStopPreservesIt() {
         controller.start()
         controller.setEnabled(true)

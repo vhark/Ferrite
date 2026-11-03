@@ -115,6 +115,7 @@ public final class KeepAwakeController {
         timer = nil
         assertions.deactivate()
         state = .off
+        emit()
         requestCleanup(.off)
     }
 
