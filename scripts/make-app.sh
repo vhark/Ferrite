@@ -31,6 +31,10 @@ APP="build/Ferrite.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$PRODUCTS/Ferrite" "$APP/Contents/MacOS/Ferrite"
+mkdir -p "$APP/Contents/Library/LaunchDaemons"
+cp "$PRODUCTS/FerriteKeepAwakeHelper" "$APP/Contents/MacOS/FerriteKeepAwakeHelper"
+cp Resources/LaunchDaemons/dev.ferrite.Ferrite.KeepAwakeHelper.plist \
+  "$APP/Contents/Library/LaunchDaemons/"
 # SwiftPM resource bundles ride along (KeyboardShortcuts ships localizations).
 for b in "$PRODUCTS"/*.bundle; do
   [ -d "$b" ] && cp -R "$b" "$APP/Contents/Resources/"
@@ -85,11 +89,14 @@ STUCK
   wait "$pid"
 }
 
+HELPER="$APP/Contents/MacOS/FerriteKeepAwakeHelper"
 if [ -n "$IDENTITY" ]; then
-  sign "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP"
+  SIGN_IDENTITY="$IDENTITY"
 elif security find-identity -v -p codesigning 2>/dev/null | grep -q "Ferrite Dev"; then
-  sign "${SIGN_FLAGS[@]}" --sign "Ferrite Dev" "$APP"
+  SIGN_IDENTITY="Ferrite Dev"
 else
-  sign "${SIGN_FLAGS[@]}" --sign - "$APP"
+  SIGN_IDENTITY="-"
 fi
+sign "${SIGN_FLAGS[@]}" --sign "$SIGN_IDENTITY" "$HELPER"
+sign "${SIGN_FLAGS[@]}" --sign "$SIGN_IDENTITY" "$APP"
 echo "Built $APP (version $VERSION)"
