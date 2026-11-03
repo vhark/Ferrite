@@ -17,6 +17,7 @@ final class PersistenceCoordinator {
     private let monitor = WorkspaceMonitor()
     private let excludeBox: ExcludeListBox
     private let excludeURL: URL
+    let supportDirectory: URL
     let layoutLibraryStore: LayoutLibraryStore
     private let reflowStore: ReflowStore
     private let magnetStore: MagnetSettingsStore
@@ -79,6 +80,7 @@ final class PersistenceCoordinator {
         let supportDir = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Ferrite")
+        supportDirectory = supportDir
         settingsNotificationObject = supportDir.path
         // One-shot MacTLM → Ferrite migration, BEFORE any store reads: the
         // stores below adopt whatever is on disk at construction, so the

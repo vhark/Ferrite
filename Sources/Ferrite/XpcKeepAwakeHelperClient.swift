@@ -21,9 +21,12 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
     }
 
     func disable(completion: @escaping (Result<Void, Error>) -> Void) {
-        guard service.status != .notRegistered && service.status != .requiresApproval else {
+        switch service.status {
+        case .notRegistered, .notFound, .requiresApproval:
             DispatchQueue.main.async { completion(.success(())) }
             return
+        default:
+            break
         }
         request(KeepAwakeXPC.disable) { result in
             switch result {
@@ -34,9 +37,12 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
     }
 
     func status(completion: @escaping (Result<Bool, Error>) -> Void) {
-        guard service.status != .notRegistered else {
+        switch service.status {
+        case .notRegistered, .notFound:
             DispatchQueue.main.async { completion(.success(false)) }
             return
+        default:
+            break
         }
         request(KeepAwakeXPC.status) { result in
             switch result {

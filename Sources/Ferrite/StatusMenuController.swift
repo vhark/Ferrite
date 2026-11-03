@@ -3,15 +3,18 @@ import ServiceManagement
 import KeyboardShortcuts
 import FerriteCore
 
-final class StatusMenuController: NSObject, NSMenuDelegate {
+@MainActor final class StatusMenuController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(
         withLength: NSStatusItem.squareLength)
     private let coordinator: PersistenceCoordinator
+    private let keepAwake: KeepAwakeController
     private var menuLayouts: [UUID: MonitorLayout] = [:]
-    private lazy var preferences = PreferencesWindowController(coordinator: coordinator)
+    private lazy var preferences = PreferencesWindowController(
+        coordinator: coordinator, keepAwake: keepAwake)
 
-    init(coordinator: PersistenceCoordinator) {
+    init(coordinator: PersistenceCoordinator, keepAwake: KeepAwakeController) {
         self.coordinator = coordinator
+        self.keepAwake = keepAwake
         super.init()
         statusItem.button?.image = NSImage(
             systemSymbolName: "rectangle.3.group",
@@ -95,6 +98,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let pause = actionItem("Pause Persistence", #selector(togglePause))
         pause.state = coordinator.isPaused ? .on : .off
         menu.addItem(pause)
+        let keepAwakeItem = actionItem(
+            "Keep Mac Awake (Alpha) — \(keepAwake.state.displayText)",
+            #selector(toggleKeepAwake))
+        keepAwakeItem.state = keepAwake.desiredEnabled ? .on : .off
+        menu.addItem(keepAwakeItem)
         menu.addItem(actionItem("Exclude Frontmost App", #selector(excludeFrontmost)))
         menu.addItem(.separator())
         let loginStatus = SMAppService.mainApp.status
@@ -407,6 +415,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func togglePause(_ sender: NSMenuItem) {
         coordinator.isPaused.toggle()
         sender.state = coordinator.isPaused ? .on : .off
+    }
+
+    @objc private func toggleKeepAwake(_ sender: NSMenuItem) {
+        keepAwake.setEnabled(!keepAwake.desiredEnabled)
+        sender.state = keepAwake.desiredEnabled ? .on : .off
     }
 
     @objc private func excludeFrontmost() {

@@ -1,18 +1,22 @@
 import AppKit
 import SwiftUI
+import FerriteCore
 
 /// Single reusable Preferences window. The app is an accessory (no Dock icon),
 /// so it activates itself before showing the window.
-final class PreferencesWindowController {
+@MainActor final class PreferencesWindowController {
     private var window: NSWindow?
     private var layoutsModel: LayoutsPreferencesModel?
     private var appsModel: AppsPreferencesModel?
     private var reflowsModel: ReflowsPreferencesModel?
     private var magnetsModel: MagnetsPreferencesModel?
+    private var powerModel: PowerPreferencesModel?
     private let coordinator: PersistenceCoordinator
+    private let keepAwake: KeepAwakeController
 
-    init(coordinator: PersistenceCoordinator) {
+    init(coordinator: PersistenceCoordinator, keepAwake: KeepAwakeController) {
         self.coordinator = coordinator
+        self.keepAwake = keepAwake
     }
 
     func show() {
@@ -24,6 +28,7 @@ final class PreferencesWindowController {
             appsModel?.reload()
             reflowsModel?.reload()
             magnetsModel?.reload()
+            powerModel?.reload()
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             return
@@ -32,15 +37,18 @@ final class PreferencesWindowController {
         let appsModel = AppsPreferencesModel(coordinator: coordinator)
         let reflowsModel = ReflowsPreferencesModel(coordinator: coordinator)
         let magnetsModel = MagnetsPreferencesModel(coordinator: coordinator)
+        let powerModel = PowerPreferencesModel(controller: keepAwake)
         self.layoutsModel = layoutsModel
         self.appsModel = appsModel
         self.reflowsModel = reflowsModel
         self.magnetsModel = magnetsModel
+        self.powerModel = powerModel
         let hosting = NSHostingController(
             rootView: PreferencesRootView(layoutsModel: layoutsModel,
                                           appsModel: appsModel,
                                           reflowsModel: reflowsModel,
-                                          magnetsModel: magnetsModel))
+                                          magnetsModel: magnetsModel,
+                                          powerModel: powerModel))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Ferrite Preferences"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
@@ -52,13 +60,14 @@ final class PreferencesWindowController {
     }
 }
 
-/// Layouts, Apps, Reflows and Magnets share one window, macOS System Settings
+/// Layouts, Apps, Reflows, Magnets and Power share one window, macOS System Settings
 /// style.
 private struct PreferencesRootView: View {
     @ObservedObject var layoutsModel: LayoutsPreferencesModel
     @ObservedObject var appsModel: AppsPreferencesModel
     @ObservedObject var reflowsModel: ReflowsPreferencesModel
     @ObservedObject var magnetsModel: MagnetsPreferencesModel
+    @ObservedObject var powerModel: PowerPreferencesModel
 
     var body: some View {
         TabView {
@@ -70,6 +79,8 @@ private struct PreferencesRootView: View {
                 .tabItem { Text("Reflows") }
             MagnetsPreferencesView(model: magnetsModel)
                 .tabItem { Text("Magnets") }
+            PowerPreferencesView(model: powerModel)
+                .tabItem { Text("Power") }
         }
         .padding(12)
         .frame(minWidth: 620, minHeight: 420)
