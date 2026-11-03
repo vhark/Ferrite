@@ -21,7 +21,7 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
     }
 
     func disable(completion: @escaping (Result<Void, Error>) -> Void) {
-        guard service.status != .notRegistered else {
+        guard service.status != .notRegistered && service.status != .requiresApproval else {
             DispatchQueue.main.async { completion(.success(())) }
             return
         }
@@ -48,7 +48,21 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
     }
 
     private func registerIfNeeded() throws {
-        if service.status == .notRegistered { try service.register() }
+        if service.status == .notRegistered {
+            do {
+                try service.register()
+            } catch {
+                switch (error as NSError).code {
+                case kSMErrorLaunchDeniedByUser:
+                    throw KeepAwakeClientError.approvalNeeded(
+                        "Approve Ferrite's privileged helper in System Settings → General → Login Items.")
+                case kSMErrorAlreadyRegistered:
+                    break
+                default:
+                    throw error
+                }
+            }
+        }
         switch service.status {
         case .enabled: return
         case .requiresApproval:
@@ -75,7 +89,9 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
                     let description = xpc_dictionary_get_string(reply, XPC_ERROR_KEY_DESCRIPTION)
                         .map { String(cString: $0) } ?? "XPC transport error"
                     if retryOnDisconnect {
-                        self.connection = nil
+                        if self.connection.map(ObjectIdentifier.init) == ObjectIdentifier(connection) {
+                            self.connection = nil
+                        }
                         self.queue.asyncAfter(deadline: .now() + 0.5) {
                             self.request(operation, retryOnDisconnect: false, completion: completion)
                         }
@@ -100,8 +116,10 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
     private func makeConnection() -> xpc_connection_t {
         if let connection { return connection }
         let connection = xpc_connection_create_mach_service(KeepAwakeXPC.serviceName, queue, 0)
+        let id = ObjectIdentifier(connection)
         xpc_connection_set_event_handler(connection) { [weak self] event in
-            if xpc_get_type(event) == XPC_TYPE_ERROR {
+            if xpc_get_type(event) == XPC_TYPE_ERROR,
+               self?.connection.map(ObjectIdentifier.init) == id {
                 self?.connection = nil
             }
         }
