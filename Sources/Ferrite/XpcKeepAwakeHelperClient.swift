@@ -17,11 +17,14 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
                 case .success: completion(.success(()))
                 }
             }
-        } catch { completion(.failure(error)) }
+        } catch { DispatchQueue.main.async { completion(.failure(error)) } }
     }
 
     func disable(completion: @escaping (Result<Void, Error>) -> Void) {
-        guard service.status != .notRegistered else { completion(.success(())); return }
+        guard service.status != .notRegistered else {
+            DispatchQueue.main.async { completion(.success(())) }
+            return
+        }
         request(KeepAwakeXPC.disable) { result in
             switch result {
             case let .failure(error): completion(.failure(error))
@@ -31,7 +34,10 @@ final class XpcKeepAwakeHelperClient: KeepAwakeHelperClient {
     }
 
     func status(completion: @escaping (Result<Bool, Error>) -> Void) {
-        guard service.status != .notRegistered else { completion(.success(false)); return }
+        guard service.status != .notRegistered else {
+            DispatchQueue.main.async { completion(.success(false)) }
+            return
+        }
         request(KeepAwakeXPC.status) { result in
             switch result {
             case let .failure(error): completion(.failure(error))
