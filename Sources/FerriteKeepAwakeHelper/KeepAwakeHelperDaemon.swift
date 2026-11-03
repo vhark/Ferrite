@@ -44,6 +44,7 @@ final class KeepAwakeHelperDaemon {
 
     private func accept(_ connection: xpc_connection_t) {
         let id = ObjectIdentifier(connection)
+        xpc_connection_set_target_queue(connection, queue)
         xpc_connection_set_event_handler(connection) { [weak self] event in
             guard let self else { return }
             let type = xpc_get_type(event)

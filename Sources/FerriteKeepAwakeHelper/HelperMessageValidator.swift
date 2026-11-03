@@ -10,6 +10,7 @@ final class HelperMessageValidator {
         var code: SecCode?
         var staticCode: SecStaticCode?
         guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+              SecCodeCheckValidity(code, [], nil) == errSecSuccess,
               SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
               let info = Self.signingInformation(staticCode),
               let certificates = info[KeepAwakeXPC.certificates] as? [SecCertificate],
@@ -22,6 +23,7 @@ final class HelperMessageValidator {
         var staticCode: SecStaticCode?
         guard SecCodeCreateWithXPCMessage(message, [], &code) == errSecSuccess,
               let code,
+              SecCodeCheckValidity(code, [], nil) == errSecSuccess,
               SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
               let info = Self.signingInformation(staticCode),
               info[KeepAwakeXPC.identifier] as? String == KeepAwakeXPC.applicationIdentifier,
