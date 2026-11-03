@@ -15,6 +15,7 @@ let package = Package(
                 "FerriteCore",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ]),
+        .executableTarget(name: "FerriteKeepAwakeHelper", dependencies: ["FerriteCore"]),
         .testTarget(name: "FerriteCoreTests", dependencies: ["FerriteCore"]),
     ]
 )
