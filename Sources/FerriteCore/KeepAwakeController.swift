@@ -114,16 +114,19 @@ public final class KeepAwakeController {
         timer?.invalidate()
         timer = nil
         assertions.deactivate()
+        state = .off
         requestCleanup(.off)
     }
 
     public func setEnabled(_ enabled: Bool) {
         generation += 1
         desiredEnabled = enabled
+        if !enabled { assertions.deactivate() }
         do {
             try store.save(KeepAwakeSettings(keepAwakeEnabled: enabled))
         } catch {
             state = .error("Could not save power preference: \(error.localizedDescription)")
+            requestCleanup(state)
             emit()
             return
         }
@@ -131,7 +134,6 @@ public final class KeepAwakeController {
             registerLoginItem()
             reconcile()
         } else {
-            assertions.deactivate()
             state = .off
             requestCleanup(.off)
             emit()
@@ -146,7 +148,9 @@ public final class KeepAwakeController {
             emit()
         }
         guard desiredEnabled else {
-            if case .error = state { requestCleanup(.off) }
+            if case let .error(message) = state {
+                requestCleanup(.error(message))
+            }
             return
         }
         guard powerSource.isOnAC else {

@@ -315,6 +315,50 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertFalse(controller.desiredEnabled)
     }
 
+    func testSaveFailureDuringDisableReleasesAssertionsAndPreservesError() throws {
+        controller.start()
+        controller.setEnabled(true)
+        let url = directory.appendingPathComponent("power.json")
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+
+        controller.setEnabled(false)
+        controller.reconcile()
+        XCTAssertFalse(assertions.active)
+        XCTAssertFalse(helper.enabled)
+        guard case let .error(message) = controller.state else {
+            XCTFail("Expected save error to survive cleanup, got \(controller.state)")
+            return
+        }
+        XCTAssertTrue(message.contains("Could not save power preference"))
+        XCTAssertFalse(controller.desiredEnabled)
+    }
+
+    func testRestartAfterStopReacquiresAssertionsBeforeActive() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+        controller.stop()
+        XCTAssertFalse(assertions.active)
+        XCTAssertNotEqual(controller.state, .active)
+
+        controller.start()
+        guard helper.pendingEnable.count == 1 else {
+            XCTFail("Restart must reactivate before reporting Active")
+            return
+        }
+        helper.completeEnable(0, with: .success(()))
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected stop cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .failure(
+            InjectedKeepAwakeError(message: "old stop cleanup failed")))
+        controller.reconcile()
+        XCTAssertTrue(assertions.active)
+        XCTAssertEqual(controller.state, .active)
+    }
+
     func testDisableClearsPreferenceAndStopPreservesIt() {
         controller.start()
         controller.setEnabled(true)
