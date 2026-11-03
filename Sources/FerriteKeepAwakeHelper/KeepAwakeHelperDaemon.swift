@@ -10,6 +10,7 @@ final class KeepAwakeHelperDaemon {
     private var listener: xpc_connection_t?
     private var clients: Set<ObjectIdentifier> = []
     private var lastError: String?
+    private var recoveryPending = false
     private var timer: Timer?
     private var sigterm: DispatchSourceSignal?
 
@@ -23,8 +24,14 @@ final class KeepAwakeHelperDaemon {
 
     func start() {
         queue.sync {
-            do { try controller.recoverAtStartup(); lastError = nil }
-            catch { lastError = error.localizedDescription }
+            do {
+                try controller.recoverAtStartup()
+                recoveryPending = false
+                lastError = nil
+            } catch {
+                recoveryPending = true
+                lastError = error.localizedDescription
+            }
         }
         let listener = xpc_connection_create_mach_service(
             KeepAwakeXPC.serviceName, queue,
@@ -76,11 +83,18 @@ final class KeepAwakeHelperDaemon {
         do {
             switch operation {
             case KeepAwakeXPC.enable:
+                guard !recoveryPending else {
+                    let reason = lastError.map { "Startup cleanup is still pending: \($0)" }
+                        ?? "Startup cleanup is still pending."
+                    reply(to: connection, enabled: nil, error: reason)
+                    return
+                }
                 try controller.enable()
                 lastError = nil
                 reply(to: connection, enabled: true, error: lastError)
             case KeepAwakeXPC.disable:
                 try controller.disable()
+                recoveryPending = false
                 lastError = nil
                 reply(to: connection, enabled: false, error: nil)
             case KeepAwakeXPC.status:
@@ -90,6 +104,7 @@ final class KeepAwakeHelperDaemon {
                 reply(to: connection, enabled: nil, error: "Unknown operation.")
             }
         } catch {
+            recoveryPending = controller.needsCleanup
             lastError = error.localizedDescription
             reply(to: connection, enabled: nil, error: lastError)
         }
@@ -106,14 +121,20 @@ final class KeepAwakeHelperDaemon {
     }
 
     private func reconcileSafety() {
-        if !powerSource.isOnAC || (lastError != nil && controller.needsCleanup) {
+        if !powerSource.isOnAC || recoveryPending {
             cleanup()
         }
     }
 
     private func cleanup() {
-        do { try controller.disable(); lastError = nil }
-        catch { lastError = error.localizedDescription }
+        do {
+            try controller.disable()
+            recoveryPending = false
+            lastError = nil
+        } catch {
+            recoveryPending = controller.needsCleanup
+            lastError = error.localizedDescription
+        }
     }
 
     private func installSIGTERMHandler() {
