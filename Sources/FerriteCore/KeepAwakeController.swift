@@ -77,6 +77,8 @@ public final class KeepAwakeController {
     private var cleanupState: KeepAwakeState?
     private var cleanupRequestGeneration: Int?
     private var pendingCleanupState: KeepAwakeState?
+    private var preferenceErrorMessage: String?
+    private var cleanupFailed = false
 
     public init(store: KeepAwakeSettingsStore,
                 powerSource: PowerSourceProviding,
@@ -95,6 +97,7 @@ public final class KeepAwakeController {
 
     public func start() {
         generation += 1
+        busy = false
         guard !running else { return }
         running = true
         desiredEnabled = store.load().keepAwakeEnabled
@@ -110,6 +113,7 @@ public final class KeepAwakeController {
 
     public func stop() {
         generation += 1
+        busy = false
         running = false
         timer?.invalidate()
         timer = nil
@@ -121,12 +125,19 @@ public final class KeepAwakeController {
 
     public func setEnabled(_ enabled: Bool) {
         generation += 1
+        busy = false
         desiredEnabled = enabled
         if !enabled { assertions.deactivate() }
         do {
             try store.save(KeepAwakeSettings(keepAwakeEnabled: enabled))
+            if preferenceErrorMessage != nil {
+                preferenceErrorMessage = nil
+                if case .error = state { state = .off }
+            }
         } catch {
-            state = .error("Could not save power preference: \(error.localizedDescription)")
+            let message = "Could not save power preference: \(error.localizedDescription)"
+            preferenceErrorMessage = message
+            state = .error(message)
             requestCleanup(state)
             emit()
             return
@@ -149,8 +160,8 @@ public final class KeepAwakeController {
             emit()
         }
         guard desiredEnabled else {
-            if case let .error(message) = state {
-                requestCleanup(.error(message))
+            if case .error = state, preferenceErrorMessage == nil || cleanupFailed {
+                requestCleanup(.off)
             }
             return
         }
@@ -190,7 +201,6 @@ public final class KeepAwakeController {
         busy = true
         helper.enable { [weak self] result in
             guard let self else { return }
-            self.busy = false
             guard self.generation == activationGeneration else {
                 if !self.running || !self.desiredEnabled {
                     self.requestCleanup(.off)
@@ -199,6 +209,7 @@ public final class KeepAwakeController {
                 }
                 return
             }
+            self.busy = false
             guard self.running, self.desiredEnabled else {
                 self.requestCleanup(.off)
                 return
@@ -236,6 +247,7 @@ public final class KeepAwakeController {
 
     private func suspendForBattery() {
         generation += 1
+        busy = false
         assertions.deactivate()
         state = .waitingForAC
         requestCleanup(.waitingForAC)
@@ -269,14 +281,23 @@ public final class KeepAwakeController {
                                      generation cleanupGeneration: Int) {
         guard generation == cleanupGeneration else { return }
         switch result {
-        case .success: state = normalState
-        case let .failure(error): state = .error(error.localizedDescription)
+        case .success:
+            cleanupFailed = false
+            if let preferenceErrorMessage {
+                state = .error(preferenceErrorMessage)
+            } else {
+                state = normalState
+            }
+        case let .failure(error):
+            cleanupFailed = true
+            state = .error(error.localizedDescription)
         }
         emit()
     }
 
     private func fail(_ message: String) {
         generation += 1
+        busy = false
         assertions.deactivate()
         state = .error(message)
         requestCleanup(state)

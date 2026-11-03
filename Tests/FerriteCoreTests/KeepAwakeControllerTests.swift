@@ -334,6 +334,82 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertFalse(controller.desiredEnabled)
     }
 
+    func testSuccessfulCleanupRetryClearsCleanupError() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+        controller.setEnabled(false)
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected initial cleanup")
+            return
+        }
+        helper.completeDisable(0, with: .failure(
+            InjectedKeepAwakeError(message: "cleanup failed")))
+        XCTAssertEqual(controller.state, .error("cleanup failed"))
+
+        controller.reconcile()
+        guard helper.pendingDisable.count == 2 else {
+            XCTFail("Expected cleanup retry")
+            return
+        }
+        helper.completeDisable(1, with: .success(()))
+        XCTAssertEqual(controller.state, .off)
+        controller.reconcile()
+        XCTAssertEqual(helper.pendingDisable.count, 2)
+    }
+
+    func testStaleEnableCleanupPreservesSaveFailure() throws {
+        controller.start()
+        helper.deferCompletions = true
+        controller.setEnabled(true)
+        let url = directory.appendingPathComponent("power.json")
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+
+        controller.setEnabled(false)
+        guard helper.pendingEnable.count == 1 else {
+            XCTFail("Expected pending enable")
+            return
+        }
+        helper.completeEnable(0, with: .success(()))
+        guard helper.pendingDisable.count == 1 else {
+            XCTFail("Expected cleanup after save failure")
+            return
+        }
+        helper.completeDisable(0, with: .success(()))
+        guard helper.pendingDisable.count == 2 else {
+            XCTFail("Expected stale-enable cleanup")
+            return
+        }
+        helper.completeDisable(1, with: .success(()))
+        guard case let .error(message) = controller.state else {
+            XCTFail("Expected preserved save error, got \(controller.state)")
+            return
+        }
+        XCTAssertTrue(message.contains("Could not save power preference"))
+    }
+
+    func testSuccessfulSaveAfterPreferenceFailureReactivates() throws {
+        controller.start()
+        helper.deferCompletions = true
+        controller.setEnabled(true)
+        let url = directory.appendingPathComponent("power.json")
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        controller.setEnabled(false)
+        XCTAssertEqual(controller.desiredEnabled, false)
+
+        try FileManager.default.removeItem(at: url)
+        controller.setEnabled(true)
+        guard helper.pendingEnable.count == 2 else {
+            XCTFail("Expected recovered enable after save succeeded")
+            return
+        }
+        helper.completeEnable(1, with: .success(()))
+        XCTAssertEqual(controller.state, .active)
+        XCTAssertTrue(assertions.active)
+    }
+
     func testRestartAfterStopReacquiresAssertionsBeforeActive() {
         controller.start()
         controller.setEnabled(true)
@@ -364,7 +440,10 @@ final class KeepAwakeControllerTests: XCTestCase {
         controller.setEnabled(true)
         helper.deferCompletions = true
         var observed: [KeepAwakeState] = []
-        controller.onChange = { observed.append(self.controller.state) }
+        controller.onChange = { [weak self] in
+            guard let self else { return }
+            observed.append(self.controller.state)
+        }
 
         controller.stop()
         XCTAssertEqual(observed.last, .off)
