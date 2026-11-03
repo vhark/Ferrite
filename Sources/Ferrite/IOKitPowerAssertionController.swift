@@ -52,6 +52,7 @@ final class IOKitPowerAssertionController: PowerAssertionControlling {
     }
 
     private func declareActivity() {
+        guard activityAssertion != 0 else { return }
         var next = activityAssertion
         let result = IOPMAssertionDeclareUserActivity(reason, kIOPMUserActiveLocal, &next)
         guard result == kIOReturnSuccess else {
