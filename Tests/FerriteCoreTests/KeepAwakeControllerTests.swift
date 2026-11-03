@@ -272,6 +272,25 @@ final class KeepAwakeControllerTests: XCTestCase {
         XCTAssertTrue(controller.desiredEnabled)
     }
 
+    func testReactivationCancelsObsoleteQueuedCleanup() {
+        controller.start()
+        controller.setEnabled(true)
+        helper.deferCompletions = true
+
+        power.isOnAC = false
+        controller.reconcile() // in-flight AC-loss cleanup
+        controller.setEnabled(false) // queues Off cleanup behind it
+
+        power.isOnAC = true
+        controller.setEnabled(true) // must cancel obsolete queued cleanup
+        helper.completeEnable(0, with: .success(()))
+        XCTAssertEqual(controller.state, .active)
+
+        helper.completeDisable(0, with: .success(()))
+        XCTAssertEqual(controller.state, .active)
+        XCTAssertEqual(helper.pendingDisable.count, 1)
+    }
+
     func testDisableClearsPreferenceAndStopPreservesIt() {
         controller.start()
         controller.setEnabled(true)

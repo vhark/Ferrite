@@ -156,6 +156,7 @@ public final class KeepAwakeController {
             }
             return
         }
+        pendingCleanupState = nil
         guard !busy else { return }
         switch state {
         case .active:
